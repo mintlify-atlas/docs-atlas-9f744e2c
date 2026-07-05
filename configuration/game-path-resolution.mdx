@@ -1,7 +1,7 @@
 ---
-title: "How the launcher resolves the game binary path"
+title: "SM64 Coop DX launcher: how the game binary path is resolved"
 sidebarTitle: "Path Resolution"
-description: "The launcher resolves the SM64 Coop DX binary through a 5-tier priority chain. Each level is validated; if the path doesn't exist the launcher falls through to the next tier."
+description: "Understand the 5-tier chain the launcher uses to find sm64coopdx: CLI flag, env var, profile override, launcher.toml, and four auto-detect fallback paths."
 ---
 
 Every time the launcher starts it must locate the `sm64coopdx` binary before it can launch the game. Rather than requiring explicit configuration, it works through a five-tier priority chain — from the most specific override (a CLI flag you pass directly) down to a broad automatic search of your home directory. The chain is sequential and fault-tolerant: if a configured path points to a file that does not exist, the launcher logs a warning and tries the next tier instead of failing immediately.
@@ -120,6 +120,7 @@ Every tier follows the same validation rule: if the path string is present but d
 ```
 [WARN] CLI --game-path points to non-existent file: /bad/path/sm64coopdx
 [WARN] SM64COOPDX_PATH points to non-existent file: /also/bad/sm64coopdx
+[WARN] Profile override points to non-existent file: /profile/path/sm64coopdx
 [WARN] launcher.toml [game].path points to non-existent file: /still/missing
 [WARN] Default game path not found: <launcher>/../games/mario64/sm64coopdx
 ```

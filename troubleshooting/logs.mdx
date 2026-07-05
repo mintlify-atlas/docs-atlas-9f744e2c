@@ -1,7 +1,7 @@
 ---
-title: "Reading launcher and game logs for debugging"
+title: "Reading SM64 Coop DX Launcher logs for crash debugging"
 sidebarTitle: "Logs"
-description: "The launcher writes game stderr to game_stderr.log and its own logs to the terminal via env_logger. Learn how to enable debug logging and interpret common log messages."
+description: "The launcher captures game stderr to game_stderr.log and emits structured logs via env_logger. Learn to enable debug logging and read key log messages."
 ---
 
 The SM64 Coop DX Launcher produces two separate streams of diagnostic output: a log file that captures everything the game process writes to stderr, and the launcher's own structured log messages that are emitted to the terminal through the `env_logger` crate. Understanding both streams lets you pinpoint the exact point of failure — whether the problem is in the launcher's startup logic, the binary path resolution, or deep inside the game process itself.
@@ -74,6 +74,7 @@ The following messages appear at `info` level and above. They mark the most impo
 | Log message | What it means |
 |-------------|---------------|
 | `Initializing SDL2 subsystems` | Launcher startup — SDL2 is being set up |
+| `SDL2_mixer initialized` | SDL2 audio mixer opened successfully |
 | `Using game path from CLI: …` | Binary found via `--game-path` flag |
 | `Using game path from SM64COOPDX_PATH: …` | Binary found via environment variable |
 | `Using game path from profile override: …` | Binary found via active profile's `game_path` |
@@ -86,6 +87,7 @@ The following messages appear at `info` level and above. They mark the most impo
 | `ROM copied: … → …` | ROM was copied to the save directory |
 | `Spawning: … with N args, cwd=…` | The exact binary and argument list passed to `Command::new()` |
 | `Game process exited with status: …` | Game closed; exit code shown |
+| `Shutdown complete` | Launcher main loop exited cleanly |
 
 At `warn` level, messages like `CLI --game-path points to non-existent file` and `launcher.toml [game].path points to non-existent file` tell you which resolution tier was tried and fell through.
 

@@ -20,10 +20,11 @@ These paths are created and managed by the launcher itself.
 | `~/.local/share/sm64coopdx/profiles/active.txt` | Single-line text file containing the name of the currently active profile |
 | `~/.local/share/sm64coopdx/profiles/<name>/profile.json` | Per-profile options: player name, boolean launch flags, optional binary path override, and creation timestamp |
 | `~/.local/share/sm64coopdx/profiles/<name>/sm64config.txt` | Per-profile game config; passed to the game via `--configfile` when the file contains at least one byte |
-| `~/.local/share/sm64coopdx/profiles/<name>/saves/` | Save file directory (legacy — present for compatibility; all profiles currently share a common save path) |
+| `~/.local/share/sm64coopdx/profiles/<name>/saves/` | Per-profile save file directory; created automatically when the profile is created |
 | `~/.local/share/sm64coopdx/assets/` | Launcher assets including fonts, sounds, images, and the mod database |
 | `~/.local/share/sm64coopdx/baserom.us.z64` | Validated ROM copied here automatically before game launch |
 | `~/.local/share/sm64coopdx/game_stderr.log` | Game process stderr captured for post-mortem diagnosis |
+| `~/.local/share/sm64coopdx/_downloads/` | Temporary directory used during mod and updater downloads; cleaned up after a successful install |
 
 <Note>
   The launcher passes `--savepath ~/.local/share/sm64coopdx/` to the game binary so both the launcher and the game use the same filesystem root for mods, the ROM, DynOS packs, and saves.
@@ -58,6 +59,7 @@ These files live inside the SM64 Coop DX installation directory (for example `~/
 | `mods/` | No | Base game mods bundled with the release |
 | `Super Mario 64 (USA).z64` | **Yes** | ROM file searched here first; must have MD5 `20b854b239203baf6c961b850a4a51a2` |
 | `libdiscord_game_sdk.so` | No | Discord Game SDK; loaded by the game at runtime for rich presence |
+| `coopdx_updater` | No | Optional auto-updater helper binary shipped with some release archives |
 
 <Warning>
   If `lang/English.ini` is missing, the launcher will display an error and refuse to launch the game. Make sure the `lang/` directory is present next to the game binary.

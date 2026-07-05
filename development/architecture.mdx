@@ -1,7 +1,7 @@
 ---
-title: "SM64 Coop DX Launcher architecture overview"
+title: "SM64 Coop DX Launcher architecture and module overview"
 sidebarTitle: "Architecture"
-description: "High-level architecture of coopdx-rs: the SDL2 event loop, application state machine, manager modules, UI system, and concurrency model for audio and game process monitoring."
+description: "Architecture reference for coopdx-rs: SDL2 event loop, AppState machine, manager and UI modules, and the concurrency model for audio and downloads."
 ---
 
 coopdx-rs is a single-binary SDL2 application written in Rust. The entire UI, audio playback, game launching, and mod management run in one process. Understanding the module layout, state machine, and concurrency model makes it straightforward to navigate the codebase and extend it safely.
@@ -200,6 +200,7 @@ The full set of logical actions is:
 | `PagePrev` | Previous page in Download Browser (L1, PageUp) |
 | `PageNext` | Next page in Download Browser (R1, PageDown) |
 | `Menu` | Toggle arc menu (Start button, Tab key) |
+| `None` | No-op — returned for unmapped buttons and hat states (e.g. `HatState::Centered`) |
 
 <Tip>
   Because `joy_button_to_action` and `hat_to_action` are pure functions, they are fully covered by unit tests in the `gp_tests` module without requiring an SDL2 context. The keyboard debug keys (`J`, `K`, `L`, `U`, `O`, `I`) are mapped through the same `GpAction` dispatch path, so test coverage extends to the real event-loop behaviour.

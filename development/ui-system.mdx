@@ -123,6 +123,8 @@ The panel body area (below the header, above the footer) is computed by `panel_b
 The arc menu in `src/ui/menu.rs` presents five buttons in a curved layout on the right side of the screen. Buttons are offset horizontally according to their distance from the centre item, creating the characteristic arc shape.
 
 ```rust
+pub const MENU_ITEM_COUNT: usize = 5;
+
 pub static MENU_ITEMS: [ArcMenuItem; MENU_ITEM_COUNT] = [
     ArcMenuItem { label: "Mod Manager",   icon: "*" },
     ArcMenuItem { label: "DynOS Packs",   icon: "#" },
@@ -187,6 +189,13 @@ pub struct UiItem {
 ```
 
 `draw_item_selector` renders a scrollable list of these items inside a panel body rectangle. It accepts pre-rendered SDL2 textures for both item names and the three icon variants (check `✓`, dash `—`, plus `+`) and performs zero allocations per frame.
+
+Key layout constants from `src/ui/common.rs`:
+
+| Constant | Value | Meaning |
+|----------|-------|---------|
+| `DEFAULT_VISIBLE_ROWS` | `9` | Visible rows in standard item lists |
+| `DL_VISIBLE_ROWS` | `6` | Visible rows in the download browser mod list |
 
 Scroll state is managed by `ensure_selection_visible(selected, scroll, visible_rows) -> usize`, which adjusts the scroll offset just enough to keep the selected row on screen (no over-scroll).
 

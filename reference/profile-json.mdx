@@ -1,7 +1,7 @@
 ---
-title: "profile.json field reference for player profiles"
+title: "profile.json field reference for SM64 Coop DX profiles"
 sidebarTitle: "profile.json"
-description: "Reference for all fields in ~/.local/share/sm64coopdx/profiles/<name>/profile.json. Controls player name, game options, and per-profile binary path override."
+description: "All nine fields in profile.json for SM64 Coop DX: player name, boolean launch flags, creation timestamp, and per-profile game binary override."
 ---
 
 Each player profile stores its settings in a `profile.json` file inside its profile directory. When you launch the game, the launcher reads the active profile's `profile.json` and translates its fields into command-line arguments passed to the `sm64coopdx` binary. All boolean fields default to `false` and may be omitted from the file entirely.

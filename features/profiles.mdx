@@ -1,7 +1,7 @@
 ---
 title: "Manage player profiles and per-profile game options"
 sidebarTitle: "Profiles"
-description: "Profiles let multiple players share one installation with separate player names, game configs, and option sets. Each profile has its own sm64config.txt and profile.json."
+description: "Profiles give each player separate settings, save data, and launch options. Each profile has its own sm64config.txt, profile.json, and saves/ directory."
 ---
 
 Profiles allow multiple players — or one player with different play styles — to share a single SM64 Coop DX installation while keeping their settings completely separate. Each profile maintains its own player name, game configuration, enabled mods, DynOS packs, and launch options. Switching profiles takes effect immediately the next time you launch the game.
@@ -12,7 +12,7 @@ A profile captures everything that personalises a game session:
 
 - **Player name** shown to other players in multiplayer
 - **Per-profile `sm64config.txt`** — mod selections, DynOS packs, and network settings isolated per profile
-- **Launch flags** — `skip_intro`, `fullscreen`, `headless`, `no_discord`, and others toggled independently
+- **Launch flags** — `skip_intro`, `fullscreen`, `windowed`, `headless`, `no_discord`, and others toggled independently
 - **Game binary override** — a profile can point to a different game binary via its `game_path` field
 - **Save data** — each profile directory contains a `saves/` subdirectory
 
@@ -22,7 +22,7 @@ Profiles are stored under:
 
 ```
 ~/.local/share/sm64coopdx/profiles/
-├── active.txt          ← name of the currently active profile
+├── active.txt          ← name of the currently active profile (plain text)
 ├── Default/
 │   ├── profile.json
 │   ├── sm64config.txt
@@ -42,7 +42,7 @@ Profiles are stored under:
 
 ## Default Profile
 
-A profile named **Default** is created automatically the first time the launcher runs. It cannot be deleted. If `active.txt` is missing or points to a profile directory that no longer exists, the launcher falls back to **Default** automatically.
+A profile named **Default** is created automatically the first time the launcher runs (`ensure_default_profile` creates `profiles/Default/saves/`, writes `profile.json`, and sets `active.txt`). The Default profile cannot be deleted. If `active.txt` is missing or points to a profile directory that no longer exists, the launcher falls back to **Default** automatically.
 
 ## Opening the Profiles Panel
 
@@ -95,7 +95,25 @@ The Profile Detail screen exposes all per-profile launch options as toggleable i
 
 ## Per-Profile `sm64config.txt`
 
-When a profile's `sm64config.txt` contains actual content, the launcher passes `--configfile <path>` to the game so the profile's config takes precedence over any global config. If the file is empty (which can happen when a new profile is created from a parent with no config), `--configfile` is *not* passed, preventing the game from seeing a blank configuration.
+When a profile's `sm64config.txt` has actual content (file size greater than zero), the launcher passes `--configfile <path>` to the game so the profile's config takes precedence. If the file is empty — which can happen when a new profile is created and no parent config exists — `--configfile` is **not** passed. This prevents the game from receiving a blank configuration that would override its own defaults and break ROM path resolution.
+
+## CLI Args Produced at Launch
+
+The launcher calls `build_profile_args` to assemble the following arguments from the active profile:
+
+```bash
+--savepath ~/.local/share/sm64coopdx
+--configfile ~/.local/share/sm64coopdx/profiles/MyProfile/sm64config.txt
+--playername MyName
+--skip-intro
+--no-discord
+--fullscreen
+--windowed
+--skip-update-check
+--headless
+```
+
+`--savepath` is always included (pointing to the launcher's XDG data directory). `--configfile` is included only when the file is non-empty. Each boolean flag is included only when its corresponding option is enabled.
 
 ## Per-Profile Game Binary Path
 
@@ -108,6 +126,7 @@ A profile's `profile.json` may include an optional `game_path` field to override
   "skip_intro": true,
   "fullscreen": false,
   "no_discord": false,
+  "windowed": false,
   "skip_update_check": false,
   "headless": false
 }

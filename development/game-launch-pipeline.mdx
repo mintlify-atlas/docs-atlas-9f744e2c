@@ -1,7 +1,7 @@
 ---
-title: "Game launch pipeline: validation, ROM setup, and process spawn"
+title: "Game launch pipeline: validation, ROM, and process spawn"
 sidebarTitle: "Launch Pipeline"
-description: "Step-by-step walkthrough of what happens when the user presses Enter to launch SM64 Coop DX: fade, pre-launch validation, ROM search and copy, CLI arg assembly, and process spawn."
+description: "Step-by-step walkthrough of the coopdx-rs game launch: 500 ms fade, installation validation, ROM search and copy, CLI arg assembly, and process spawn."
 ---
 
 When the user presses Enter (or the gamepad A button) on the main screen, the launcher does not immediately hand control to the game. It first fades the display to black, validates the game installation, ensures the base ROM is in place, assembles a complete CLI argument list from every active sub-screen, configures a sanitised environment, and only then spawns the game process. A background monitor thread watches the process and signals the launcher when it exits.
@@ -16,7 +16,7 @@ The key source files are `src/game.rs` (all logic functions) and `src/main.rs` (
 
 When `AppState::Launching` is entered, the main loop begins a full-screen fade-to-black animation. Music volume is immediately reduced to near-silence (`sdl2::mixer::Music::set_volume(3)` — approximately 2% of full volume).
 
-The fade uses the constant `FADE_DURATION_MS = 500 ms` from `src/config.rs`. The overall launch animation (including the fade-in and the time the game takes to appear) spans roughly 1.5 seconds before the user sees the game window.
+The fade lasts exactly `FADE_DURATION_MS = 500 ms` (defined in `src/config.rs`). Once the 500 ms fade completes, the launcher proceeds immediately to validation and process spawn.
 
 ```rust
 // In the Launching app state — main.rs
@@ -166,7 +166,7 @@ Variables such as `LD_LIBRARY_PATH`, `LD_PRELOAD`, and `PYTHONPATH` are intentio
 2. On Unix, ensures the binary has execute permission (`chmod 755` if needed).
 3. Sets the working directory to `binary.parent()` — the game expects to find its assets relative to its own location.
 4. Redirects stdout to `/dev/null`.
-5. Redirects stderr to `~/.local/share/sm64coopdx/game_stderr.log` for post-mortem diagnosis.
+5. Redirects stderr to `{log_dir}/game_stderr.log` (where `log_dir` is `data_dir` = `~/.local/share/sm64coopdx/`) for post-mortem diagnosis.
 6. Applies the whitelisted environment from `build_game_env()`.
 
 ```rust
@@ -212,7 +212,6 @@ A typical launch command line for a player named `MyName` hosting a server on po
 
 ```bash
 ./sm64coopdx \
-  --disable-mods \
   --enable-mod my_mod \
   --server 7777 \
   --playername MyName \
@@ -222,7 +221,7 @@ A typical launch command line for a player named `MyName` hosting a server on po
   --skip-intro
 ```
 
-The actual order is: mod args first, then network args, then profile args. The `--disable-mods` flag is omitted when at least one mod is enabled — it only appears when the enabled-mods list is empty.
+The actual order is: mod args first, then network args, then profile args. When at least one mod is enabled, `--enable-mod <name>` is emitted for each mod and `--disable-mods` is **not** included. `--disable-mods` only appears as a single flag when the enabled-mods list is empty.
 
 ---
 

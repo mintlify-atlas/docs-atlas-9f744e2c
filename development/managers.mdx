@@ -1,7 +1,7 @@
 ---
 title: "Manager modules: mod, dynos, profile, network, download"
 sidebarTitle: "Managers"
-description: "Reference for the five manager modules in coopdx-rs. Each manager handles one domain: mod scanning, DynOS packs, player profiles, network config, and the download database."
+description: "Reference for the five coopdx-rs manager modules: mod scanning, DynOS packs, player profiles, network config, and the mod download database."
 ---
 
 The coopdx-rs launcher splits its data-layer concerns into five focused manager modules that live under `src/managers/`. Each module owns one domain — mod scanning, DynOS packs, player profiles, network settings, and the online download database — and exposes a clean set of public functions that the main event loop calls. All config writes use an atomic write-then-rename pattern (`*.tmp` → final) so that a crash or power loss never leaves a half-written file on disk.
@@ -169,6 +169,12 @@ pub fn rename_profile(
 Renames the profile directory and automatically updates `active.txt` if the renamed profile was active.
 
 ```rust
+pub fn delete_profile(profiles_dir: &Path, name: &str) -> Result<(), String>
+```
+
+Removes the profile directory and all its contents. Returns `Err` if `name` is `"Default"` (the default profile is undeleteable) or if `name` is the currently active profile (switch to another profile first).
+
+```rust
 pub fn load_profile_config(profile_dir: &Path) -> Result<ProfileConfig, String>
 pub fn save_profile_config(profile_dir: &Path, config: &ProfileConfig) -> Result<(), String>
 ```
@@ -192,6 +198,18 @@ pub fn build_profile_args(
 ```
 
 Converts a `ProfileConfig` into a CLI argument slice ready to be passed to the game binary. Always emits `--savepath <data_dir>`. Emits `--configfile <profile_dir>/sm64config.txt` only when that file is non-empty — an empty config file would override the game's own settings and break ROM path resolution.
+
+### Updating the player name
+
+```rust
+pub fn update_profile_playername(
+    profiles_dir: &Path,
+    profile_name: &str,
+    new_name: &str,
+) -> Result<ProfileConfig, String>
+```
+
+Loads the named profile's config, sets `playername` to `new_name`, saves it atomically, and returns the updated `ProfileConfig`. Called by the event loop when the virtual keyboard confirms a player-name edit in the Profile Detail sub-screen.
 
 ---
 
@@ -243,10 +261,10 @@ Defaults: `mode = Local`, `join_port = 7777`, `host_port = 7777`, `max_players =
 ### Reading and writing
 
 ```rust
-pub fn read_network_config(config_path: &Path) -> NetworkConfig
+pub fn parse_network_config(config_path: &Path) -> Result<NetworkConfig, String>
 ```
 
-Parses the network keys (`coop_player_name`, `coop_join_ip`, `coop_join_port`, `coop_host_port`, `amount_of_players`, `coop_network_system`, `coopnet_password`) from `sm64config.txt`. Returns defaults if the file is missing.
+Parses the network keys (`coop_player_name`, `coop_join_ip`, `coop_join_port`, `coop_host_port`, `amount_of_players`, `coop_network_system`, `coopnet_password`) from `sm64config.txt`. Returns `Ok(NetworkConfig::default())` if the file is missing.
 
 ```rust
 pub fn write_network_config(
@@ -256,10 +274,6 @@ pub fn write_network_config(
 ```
 
 Atomically rewrites the network key block while preserving all other lines (mod enables, DynOS packs, etc.) in their original order.
-
-<Note>
-In the source the parsing function is named `parse_network_config` rather than `read_network_config`. The internal name is an implementation detail; the public contract is a fallible parse that returns defaults on a missing file.
-</Note>
 
 ---
 
@@ -275,18 +289,25 @@ The download manager provides the mod database data model, the search index, and
 pub struct DbMod {
     pub id: String,
     pub url: String,
+    pub extracted_at: Option<String>,
     pub title: Option<String>,
     pub version: Option<String>,
     pub author: Option<String>,
     pub description: Option<String>,
     pub tags: Vec<String>,
     pub is_featured: bool,
-    pub download_urls: Vec<String>,
+    pub image_url: Option<String>,
+    pub description_images: Vec<String>,
     pub downloads: u64,
+    pub views: u64,
     pub rating: Option<f64>,
+    pub rating_count: u64,
+    pub review_count: u64,
+    pub update_count: u64,
+    pub first_release: Option<String>,
     pub last_update: Option<String>,
+    pub download_urls: Vec<String>,
     pub updates: Vec<ModUpdate>,
-    // … additional metadata fields
 }
 
 pub struct DbFile {
@@ -302,6 +323,16 @@ All optional fields use `#[serde(default)]` so that mods with partial data deser
 <Warning>
 Mods whose `download_urls` contain a `gamebanana.com` host are automatically excluded from the search index. GameBanana links point to HTML pages, not direct ZIP archives, and cannot be downloaded programmatically.
 </Warning>
+
+### DbMod methods
+
+```rust
+impl DbMod {
+    pub fn requires_manual_download(&self) -> bool
+}
+```
+
+Returns `true` if any URL in `download_urls` contains `gamebanana.com` (case-insensitive). The search index builder calls this to exclude such entries before indexing.
 
 ### DownloadProgress struct
 
@@ -332,17 +363,28 @@ pub fn download_mod_file(
 Streams the file to a `.{filename}.part` temporary file and atomically renames it on completion. Sets a 30-second connect timeout with no total timeout (large mods can take a while). Checks the `cancel` flag between each 64 KB chunk and deletes the `.part` file if cancelled.
 
 ```rust
-pub fn extract_mod_zip(zip_path: &Path, dest_dir: &Path) -> Result<Vec<PathBuf>, String>
+pub fn extract_mod_zip(zip_path: &Path, dest_root: &Path) -> Result<Vec<PathBuf>, String>
 ```
 
-Intelligently extracts a downloaded ZIP into `dest_dir` (the mods folder). The algorithm:
+Intelligently extracts a downloaded ZIP into `dest_root` (the mods folder). The algorithm:
 
 1. Scan all ZIP entries for files named `main.lua`. Each `main.lua`'s parent directory is a **mod root**.
-2. Extract all entries under each mod root into `dest_dir/{mod_root_name}/`.
-3. If no `main.lua` is found, fall back to extracting the ZIP flat into `dest_dir/`.
-4. Any entry whose resolved path escapes `dest_dir` (zip-slip attack) is silently skipped.
+2. Extract all entries under each mod root into `dest_root/{mod_root_name}/`.
+3. If no `main.lua` is found, fall back to extracting the ZIP flat into `dest_root/`.
+4. Any entry whose resolved path escapes `dest_root` (zip-slip attack) is silently skipped.
 
 Returns the list of extracted mod directory paths.
+
+### Installed mod tracking
+
+```rust
+pub type InstalledMap = HashMap<String, String>;
+
+pub fn load_installed_map(path: &Path) -> InstalledMap
+pub fn save_installed_map(path: &Path, map: &InstalledMap) -> Result<(), String>
+```
+
+`InstalledMap` is a persistent JSON dictionary (`launcher_downloads.json`) mapping installed folder names to their database `mod_id`. `load_installed_map` returns an empty map if the file is missing or corrupt. `save_installed_map` writes atomically via `.tmp` → rename.
 
 ### Search utilities
 

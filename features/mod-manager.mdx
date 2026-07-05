@@ -1,7 +1,7 @@
 ---
-title: "Manage Lua mods with the Mod Manager"
+title: "Enable and manage Lua mods with the SM64 Mod Manager"
 sidebarTitle: "Mod Manager"
-description: "The Mod Manager lets you enable and disable Lua mods without editing sm64config.txt. Mods are stored in ~/.local/share/sm64coopdx/mods/ as .lua files or folders with main.lua."
+description: "Enable and disable Lua mods without editing sm64config.txt. Mods live under ~/.local/share/sm64coopdx/mods/ as .lua files or directories with main.lua."
 ---
 
 The Mod Manager gives you a live view of every Lua mod installed on your system and lets you toggle them on or off before launching the game — no manual `sm64config.txt` editing required. Changes are written atomically, so your config is never left in a partially-written state.
@@ -23,10 +23,10 @@ The Mod Manager scans `~/.local/share/sm64coopdx/mods/` and recognises two kinds
 
 <CardGroup cols={2}>
   <Card title=".lua files" icon="file-code">
-    Single-file mods — any file ending in `.lua` directly inside the mods directory. The mod name is the filename without the extension (e.g. `my_cool_mod.lua` → `my_cool_mod`).
+    Single-file mods — any file ending in `.lua` directly inside the mods directory. The mod name shown in the list is the filename **without** the extension (e.g. `my_cool_mod.lua` → display name `my_cool_mod`), but the full filename is used when storing the enabled state in `sm64config.txt`.
   </Card>
   <Card title="Mod folders" icon="folder">
-    Directory mods — any subdirectory that contains a `main.lua` file at its root. The mod name is the directory name. All other subdirectories (no `main.lua`) are silently ignored.
+    Directory mods — any subdirectory that contains a `main.lua` file at its root. The mod name is the directory name. All other subdirectories (those without `main.lua`) are silently ignored.
   </Card>
 </CardGroup>
 
@@ -58,25 +58,28 @@ When you toggle a mod, the launcher immediately rewrites the `enable-mod:` secti
 
 ## How Enabled Mods Are Stored
 
-Enabled mods are recorded as `enable-mod: <name>` lines in `sm64config.txt`:
+Enabled mods are recorded as `enable-mod: <rel_path>` lines in `sm64config.txt`:
+
+- For `.lua` files the stored value is the **full filename** (e.g. `my_cool_mod.lua`).
+- For folder mods the stored value is the **directory name** (e.g. `my_folder_mod`).
 
 ```text
-enable-mod: my_cool_mod
-enable-mod: another_mod
+enable-mod: my_cool_mod.lua
+enable-mod: my_folder_mod
 ```
 
-Each line uses the mod's *name* — the filename stem for `.lua` files, or the directory name for folder mods.
+The list is sorted alphabetically before display. `write_enabled_mods` rewrites all `enable-mod:` lines atomically, preserving every other line in the file unchanged.
 
 ## How the Launcher Passes Mods to the Game
 
-When you launch the game, the launcher translates the `enable-mod:` lines into CLI flags:
+When you launch the game, the launcher translates the `enable-mod:` entries into CLI flags:
 
 - **One or more mods enabled** — a `--enable-mod <name>` flag is appended for each enabled mod.
 - **No mods enabled** — a single `--disable-mods` flag is passed, which tells the game to skip loading any mods from the filesystem entirely.
 
 ```bash
 # Example with two mods enabled
-sm64coopdx --enable-mod my_cool_mod --enable-mod another_mod ...
+sm64coopdx --enable-mod my_cool_mod.lua --enable-mod my_folder_mod ...
 
 # Example with no mods enabled
 sm64coopdx --disable-mods ...

@@ -1,7 +1,7 @@
 ---
-title: "Build SM64 Coop DX Launcher from source"
+title: "Building SM64 Coop DX Launcher from source on Linux"
 sidebarTitle: "Building"
-description: "Build coopdx-rs from source. Requires Rust 1.85 (edition 2024), SDL2 dev libraries on Linux, and Cargo. The release binary is stripped and LTO-optimized."
+description: "How to build coopdx-rs from source: Rust 1.85 (edition 2024), SDL2 dev libraries on Linux, Cargo. The release binary is size-optimized with LTO and strip."
 ---
 
 Building coopdx-rs from source gives you full control over the binary — debug symbols for development, or a size-optimized release binary for distribution. The project uses a standard Cargo workspace with no custom build scripts; the only external requirement beyond Rust itself is the SDL2 family of system libraries.

@@ -1,7 +1,7 @@
 ---
-title: "Super Mario 64 ROM requirements and validation"
+title: "Super Mario 64 US ROM requirements and MD5 validation"
 sidebarTitle: "ROM Requirements"
-description: "The launcher requires a Super Mario 64 (USA) ROM with MD5 20b854b239203baf6c961b850a4a51a2. It searches common locations automatically and copies the ROM to the save path."
+description: "SM64 Coop DX requires a Super Mario 64 US ROM (MD5 20b854b239203baf6c961b850a4a51a2). Launcher checks four locations and copies the ROM to the data dir."
 ---
 
 SM64 Coop DX is built from the Super Mario 64 decompilation project and requires an original Super Mario 64 (USA) ROM to reconstruct its game assets at runtime. The launcher validates this ROM by MD5 checksum before every launch and copies it into the shared data directory so the game can find it reliably — regardless of where you keep the original file.
@@ -35,6 +35,10 @@ md5sum "Super Mario 64 (USA).z64"
 ```
 
 If the output hash does not match, the file is either a different region (Japan, Europe, Shindou), a different format (`.n64` is little-endian and has a different hash), or a bad dump.
+
+<Note>
+  The launcher computes MD5 internally using the `md5` crate, reading the file in 8192-byte chunks. It does not call an external `md5sum` process — validation happens entirely in-process.
+</Note>
 
 ---
 
@@ -71,7 +75,7 @@ When you press **Launch**, the launcher searches for a valid ROM in the followin
 
 ## What happens after the ROM is found
 
-Once a valid ROM is located the launcher copies it to `~/.local/share/sm64coopdx/baserom.us.z64` before spawning the game process. On subsequent launches, if that destination file already exists and its MD5 is valid, the copy step is skipped entirely — the launcher will not copy the file again.
+Once a valid ROM is located, the launcher creates the savepath directory (`~/.local/share/sm64coopdx/`) with `create_dir_all` if it does not already exist, then copies the ROM to `~/.local/share/sm64coopdx/baserom.us.z64`. On subsequent launches, if that destination file already exists and its MD5 is valid, the copy step is skipped entirely — the launcher will not copy the file again.
 
 The game binary then reads `baserom.us.z64` from the savepath (`~/.local/share/sm64coopdx/`) during its asset extraction phase.
 

@@ -1,7 +1,7 @@
 ---
-title: "Toggle DynOS resource packs in-launcher"
+title: "Enable and toggle DynOS resource packs from the launcher"
 sidebarTitle: "DynOS Packs"
-description: "DynOS packs are subdirectories under ~/.local/share/sm64coopdx/dynos/packs/. Enable or disable them from the launcher's DynOS Packs panel without touching config files."
+description: "DynOS packs are subdirectories under dynos/packs/. Enable or disable them from the launcher's DynOS Packs panel without editing sm64config.txt manually."
 ---
 
 DynOS (Dynamic Object System) packs are resource bundles that replace or augment the game's built-in assets at runtime. Common uses include character model replacements and texture packs. The launcher's DynOS Packs panel lets you enable or disable any installed pack before launching the game, writing changes to `sm64config.txt` automatically.
@@ -24,7 +24,7 @@ All DynOS packs live under:
 ~/.local/share/sm64coopdx/dynos/packs/
 ```
 
-Each **immediate subdirectory** inside `packs/` is treated as one pack. Plain files and nested directories without a valid pack structure are silently ignored. The launcher creates the `dynos/packs/` directory automatically on first run if it does not already exist.
+Only **immediate subdirectories** inside `packs/` are treated as packs. Plain files placed directly in the `packs/` folder are silently ignored — the scanner calls `.is_dir()` on each entry and skips anything that is not a directory. The launcher creates the `dynos/packs/` directory automatically on first run if it does not already exist.
 
 ## Opening the DynOS Packs Panel
 
@@ -51,7 +51,7 @@ When you toggle a pack, the launcher immediately rewrites the `dynos-pack:` sect
 
 ## How Enabled Packs Are Stored
 
-Enabled packs are recorded as `dynos-pack: <name>` lines in `sm64config.txt`, where `<name>` is the subdirectory name inside `dynos/packs/`:
+Enabled packs are recorded as `dynos-pack: <name>` lines in `sm64config.txt`, where `<name>` is the subdirectory name inside `dynos/packs/`. The parser reads lines that begin with the prefix `dynos-pack: ` (with a space after the colon):
 
 ```text
 dynos-pack: MarioModelPack

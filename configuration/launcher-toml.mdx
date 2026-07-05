@@ -1,7 +1,7 @@
 ---
-title: "Configure the launcher with launcher.toml"
+title: "Configure the SM64 Coop DX launcher with launcher.toml"
 sidebarTitle: "launcher.toml"
-description: "The launcher.toml file at ~/.config/sm64coopdx/launcher.toml sets the game binary path and ROM path. All fields are optional with sensible auto-detection fallbacks."
+description: "Persist the game binary and ROM paths in ~/.config/sm64coopdx/launcher.toml using the [game] section. Both keys are optional with auto-detection fallbacks."
 ---
 
 The launcher reads an optional `launcher.toml` file to let you point it at your SM64 Coop DX binary and ROM without setting environment variables or passing CLI flags every time. Every field in this file is optional — if you leave it empty, or skip the file entirely, the launcher falls through its auto-detection chain and still works as long as your game is installed in a recognisable location.

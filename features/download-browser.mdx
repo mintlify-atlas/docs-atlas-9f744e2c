@@ -1,5 +1,5 @@
 ---
-title: "Browse and install mods from the Download Browser"
+title: "Browse and install community mods from the Download Browser"
 sidebarTitle: "Download Browser"
 description: "The Download Browser lets you search, filter, and install mods from a bundled database of 1,000+ SM64 Coop DX community mods without leaving the launcher."
 ---
@@ -19,12 +19,14 @@ The Download Browser brings the SM64 Coop DX mod community directly into the lau
 
 ## The Mod Database
 
-The launcher ships with a bundled database file (`database_sm64coopdx.json` in the assets directory) containing metadata for over 1,000 community mods. The database is built from the official SM64 Coop DX mod repository and includes each mod's title, author, tags, description, download URL, and version history.
+The launcher ships with a bundled database file (`database_sm64coopdx.json`) located in the assets directory at `~/.local/share/sm64coopdx/assets/database_sm64coopdx.json`. It contains metadata for over 1,000 community mods, including each mod's title, author, tags, description, download URLs, and version history.
+
+Each `DbMod` entry in the database carries the following fields: `id`, `url`, `extracted_at`, `title`, `version`, `author`, `description`, `tags`, `is_featured`, `image_url`, `description_images`, `downloads`, `views`, `rating`, `rating_count`, `review_count`, `update_count`, `first_release`, `last_update`, `download_urls`, and `updates`.
 
 The database is loaded and indexed once the first time you open the Download Browser. The search index pre-computes lowercased, combined text (ID + title + author + tags + description) for every mod so that filtering is instantaneous even on slower hardware.
 
 <Note>
-  Mods whose only download URL points to a GameBanana page (rather than a direct ZIP file) are automatically excluded from the browser. These mods require a manual visit to GameBanana to download. The rest of the list contains only mods that can be installed with a single keypress.
+  Mods whose download URLs point to a GameBanana page (detected by checking whether any URL contains `gamebanana.com`, case-insensitively) are automatically excluded from the browser. These mods require a manual visit to GameBanana to download. The rest of the list contains only mods that can be installed with a single keypress.
 </Note>
 
 ## Searching for Mods
@@ -37,7 +39,7 @@ The database is loaded and indexed once the first time you open the Download Bro
     Type any part of the mod's title or mod ID. The list updates instantly as you type. The search uses word-AND matching: every word you type must appear somewhere in the mod's metadata.
   </Step>
   <Step title="Clear search">
-    Press `Esc` to clear the search field and return focus to the mod list, or press `C` to clear all active filters at once.
+    Press `Esc` to clear the search field and return focus to the mod list, or press `C` to clear all active filters at once (search text, tags, and author).
   </Step>
 </Steps>
 
@@ -53,7 +55,7 @@ The browser displays a row of tag chips representing the most popular tags in th
     Navigate to the desired tag chip with `←` / `→` and press `Enter` to toggle it on or off. Multiple tags use **OR** semantics — a mod appears if it matches *any* active tag.
   </Step>
   <Step title="Return to the mod list">
-    Press `Tab` again to cycle focus back to the mod list.
+    Press `Tab` again to cycle focus to the author input, and once more to return to the mod list.
   </Step>
 </Steps>
 
@@ -64,12 +66,22 @@ The browser displays a row of tag chips representing the most popular tags in th
     Press `Tab` twice from the mod list (or once from the tag chips) to move focus to the author filter input.
   </Step>
   <Step title="Type an author name">
-    Start typing the author's name. The mod list immediately filters to show only mods by authors whose names start with the typed prefix (case-insensitive). Unlike tag filters, the author filter is a single-select — entering a new name replaces the previous filter.
+    Start typing the author's name. The mod list immediately filters to show only mods by matching authors. Unlike tag filters, the author filter is a single-select — entering a new name replaces the previous filter.
   </Step>
   <Step title="Clear the author filter">
     Delete the text from the input or press `C` to clear all filters.
   </Step>
 </Steps>
+
+## Focus Mode Cycle
+
+The Download Browser has three focus modes, cycled with `Tab`:
+
+| Mode | Description |
+|------|-------------|
+| **Mod List** | Browse and select mods with `↑` / `↓` |
+| **Tag Chips** | Navigate tag chips with `←` / `→` |
+| **Author Input** | Type an author name to filter results |
 
 ## Selecting and Installing a Mod
 
@@ -81,7 +93,7 @@ The browser displays a row of tag chips representing the most popular tags in th
     Press `Enter` on the selected mod to begin downloading. A download progress overlay appears, showing a progress bar and the number of bytes received.
   </Step>
   <Step title="Wait for extraction">
-    Once the ZIP file finishes downloading, it is extracted automatically into `~/.local/share/sm64coopdx/mods/`. The launcher's smart extraction finds every `main.lua` inside the archive and creates one subdirectory per mod root. If the ZIP contains no `main.lua`, files are extracted flat into the mods directory.
+    Once the ZIP file finishes downloading from a temporary `_downloads` directory, it is extracted automatically into `~/.local/share/sm64coopdx/`. The launcher's smart extraction finds every `main.lua` inside the archive and creates one subdirectory per mod root. If the ZIP contains no `main.lua`, files are extracted flat into the data directory.
   </Step>
 </Steps>
 
@@ -91,13 +103,13 @@ The browser displays a row of tag chips representing the most popular tags in th
 
 ## Where Mods Are Installed
 
-All downloaded mods are extracted to:
+Downloaded mods are extracted directly into the launcher's data directory:
 
 ```
-~/.local/share/sm64coopdx/mods/
+~/.local/share/sm64coopdx/
 ```
 
-After extraction, the installed mod directory appears in the Mod Manager just like any manually installed mod.
+ZIP files are downloaded first to a temporary subdirectory (`~/.local/share/sm64coopdx/_downloads/`) and deleted after successful extraction. An installed-mod map (`launcher_downloads.json`) is saved in the data directory to track which local folder corresponds to which database mod ID.
 
 ## Download Progress Overlay
 
@@ -114,8 +126,8 @@ You can cancel an in-progress download by pressing `Esc`. Any partially-download
 The launcher uses a smart extraction algorithm to handle archives that bundle multiple mods:
 
 1. **Scan for `main.lua`** — every file named `main.lua` inside the ZIP defines a mod root.
-2. **Extract per mod root** — each mod root is extracted into its own named subdirectory under `mods/`.
-3. **Fallback flat extraction** — if no `main.lua` is found anywhere in the ZIP, all files are extracted flat into `mods/`.
+2. **Extract per mod root** — each mod root is extracted into its own named subdirectory under the data directory.
+3. **Fallback flat extraction** — if no `main.lua` is found anywhere in the ZIP, all files are extracted flat into the data directory.
 4. **Zip-slip guard** — entries with path traversal sequences (`../`) or absolute paths are rejected individually and logged; the rest of the archive is still extracted normally.
 
 ## Keyboard Shortcuts Summary

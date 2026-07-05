@@ -1,7 +1,7 @@
 ---
-title: "Launcher assets: fonts, sounds, and sprites"
+title: "SM64 Coop DX launcher assets: fonts, images, and sounds"
 sidebarTitle: "Assets"
-description: "The launcher loads SDL2 assets (font, splash image, vinyl disc, logo, sounds, music) from ~/.local/share/sm64coopdx/assets/. Copy the assets directory before first run."
+description: "All SDL2 asset files the launcher loads from ~/.local/share/sm64coopdx/assets/: font, images, WAV sounds, OGG music tracks, and the mod database JSON."
 ---
 
 The SM64 Coop DX Launcher is a full graphical application built on SDL2. Its user interface relies on a set of external asset files — fonts, images, sound effects, background music, and a mod database — that must be present on disk before the launcher starts. These files are intentionally shipped separately from the binary so they can be updated or replaced without recompiling the launcher. All assets are loaded from a single directory under your XDG data home.
@@ -68,7 +68,7 @@ The table below lists every file the launcher loads from `~/.local/share/sm64coo
     All images are loaded as SDL2 textures via `SDL2_image`. The launcher expects standard PNG files at the exact paths listed in the table above.
 
     - **`splash.png`** — displayed for at least 3 000 ms during the splash screen phase, with a 500 ms fade transition.
-    - **`vinyl_disc.png`** — rendered as an animated spinning disc in the music player widget; its rotation is updated each frame.
+    - **`vinyl_disc.png`** — rendered as an animated spinning disc in the music player widget. The disc rotates at **90.0 degrees per second** (`VINYL_ROT_SPEED`), with the angle recalculated every frame.
     - **`sm64coopdx/logo.png`** — the game's logo, drawn prominently on the launcher's main screen.
     - **`sm64coopdx/icon.png`** — passed to SDL2 as the window icon. It appears in your desktop taskbar and window title bar.
     - **`background.png`** — the full-screen background wallpaper drawn behind all UI elements.
@@ -88,6 +88,13 @@ The table below lists every file the launcher loads from `~/.local/share/sm64coo
     2. Builds a playlist from every file found.
     3. Selects a track at random and begins playback.
     4. Automatically advances to the next random track when the current one finishes.
+
+    Two compile-time constants govern playback behaviour:
+
+    | Constant | Value | Meaning |
+    |---|---|---|
+    | `MUSIC_VOLUME` | `28` (≈ 0.22 × 128) | SDL2\_mixer volume level (0–128 scale) |
+    | `TRACK_COOLDOWN_S` | `1.0` second | Minimum time between track changes |
 
     You can add, remove, or replace `.ogg` files in this directory to customise the music without recompiling anything. An empty `ogg-sounds/` directory is valid — the launcher will simply run silently. The directory itself must exist.
   </Tab>

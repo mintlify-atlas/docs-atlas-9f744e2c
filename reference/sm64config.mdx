@@ -1,7 +1,7 @@
 ---
-title: "sm64config.txt key reference"
+title: "sm64config.txt key reference for the SM64 Coop DX launcher"
 sidebarTitle: "sm64config.txt"
-description: "Reference for the sm64config.txt keys that the launcher reads and writes. Covers mod enable lines, DynOS pack lines, and network configuration fields."
+description: "Every sm64config.txt key the SM64 Coop DX launcher reads and writes: mod enable lines, DynOS pack lines, and the seven network configuration fields."
 ---
 
 The `sm64config.txt` file is a plain-text key-value configuration file used by both the launcher and the `sm64coopdx` game binary. Each line holds a single directive. The launcher reads and writes a subset of well-known keys while preserving all other lines it does not recognise — so game settings you configure inside the game itself are never clobbered.
@@ -33,7 +33,7 @@ enable-mod: my_folder_mod
 
 - The launcher writes one line per mod that has been toggled on in the Mod Manager screen.
 - If no mods are enabled, the launcher passes `--disable-mods` to the game binary instead of writing any `enable-mod:` lines.
-- The `enable-mod:` prefix (with a trailing space and colon) is the canonical form. The launcher also accepts `enable-mod:` without a trailing space as a legacy variant.
+- The canonical form written by the launcher is `enable-mod: ` (colon followed by a space). The launcher also reads `enable-mod:` without the trailing space as a legacy variant when parsing existing config files.
 
 ---
 

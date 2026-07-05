@@ -1,7 +1,7 @@
 ---
-title: "Install SM64 Coop DX Launcher on Linux"
+title: "Install the SM64 Coop DX Launcher on Linux from source"
 sidebarTitle: "Installation"
-description: "Build coopdx-rs from source on Linux. Requires Rust 1.85+, SDL2 dev libraries, and SDL2_image, SDL2_mixer, SDL2_ttf."
+description: "Build coopdx-rs from source on Linux. Requires Rust 1.85+ (edition 2024), SDL2 dev libraries (image, mixer, ttf), and a valid SM64 US ROM to play."
 ---
 
 coopdx-rs is distributed as source code and must be compiled on your machine. The build produces a single self-contained binary at `target/release/sm64coopdx-launcher`. This page walks through every step, from installing system libraries to copying the launcher assets into place.
@@ -71,7 +71,7 @@ cargo build --release
 
 The release profile is configured for maximum size reduction (`opt-level = "z"`, LTO, strip, `codegen-units = 1`), so the initial build may take a couple of minutes. The resulting binary is placed at:
 
-```
+```text
 target/release/sm64coopdx-launcher
 ```
 

@@ -1,7 +1,7 @@
 ---
-title: "Configure multiplayer network modes"
+title: "Configure multiplayer network modes for SM64 Coop DX"
 sidebarTitle: "Network"
-description: "The Network panel configures Local, Client, Server, and CoopNet multiplayer modes. Settings are saved to sm64config.txt and passed as CLI flags when the game launches."
+description: "Configure Local, Client, Server, and CoopNet multiplayer modes. Network settings persist to sm64config.txt and become CLI flags when the game launches."
 ---
 
 The Network panel lets you choose how the game connects to other players and configure the parameters for that connection. Settings are persisted to the active profile's `sm64config.txt` and translated into CLI flags every time you launch the game, so you never have to remember the right command-line arguments.
@@ -19,7 +19,7 @@ The Network panel lets you choose how the game connects to other players and con
 
 ## Network Modes
 
-The launcher supports four network modes, cycled with `←` / `→` on the mode selector:
+The launcher supports four network modes, cycled with `←` / `→` on the mode selector. The cycle order is: **Local → Client → Server → CoopNet → Local**.
 
 <Tabs>
   <Tab title="Local">
@@ -38,6 +38,10 @@ The launcher supports four network modes, cycled with `←` / `→` on the mode 
     ```bash
     --client <ip> <port>
     ```
+
+    <Note>
+      `--client` is only added when the Join IP field is non-empty. If the IP is blank, no client flag is passed even in Client mode.
+    </Note>
   </Tab>
   <Tab title="Server">
     **Server** mode hosts a multiplayer session that other players can join. The game listens on the port you specify.
@@ -58,6 +62,10 @@ The launcher supports four network modes, cycled with `←` / `→` on the mode 
     ```bash
     --coopnet <password>
     ```
+
+    <Note>
+      `--coopnet` is only added when the Password field is non-empty. If the password is blank, no CoopNet flag is passed.
+    </Note>
   </Tab>
 </Tabs>
 
@@ -74,7 +82,7 @@ The launcher supports four network modes, cycled with `←` / `→` on the mode 
 | Network system | `coop_network_system` | `0` (Local) | All |
 
 <Note>
-  `coop_network_system` is a numeric value stored in `sm64config.txt`: `0` = Local/Client/Server (determined by CLI flags), `1` = CoopNet. The launcher writes the correct value automatically when you save settings.
+  `coop_network_system` is a numeric value stored in `sm64config.txt`: `1` = CoopNet, `0` = all other modes (Local, Client, Server — distinguished by CLI flags). The launcher writes the correct value automatically when you save settings.
 </Note>
 
 ## Text Input and Virtual Keyboard
@@ -97,35 +105,31 @@ coopnet_password myroom
 
 ## CLI Flags Generated at Launch
 
-The launcher reads the saved config and appends the appropriate flags to the game's command line:
+The launcher reads the saved config and appends the appropriate flags to the game's command line. `--playername` is included only when Player Name is non-empty; `--playercount` is included only when Max Players is greater than zero.
 
 <Tabs>
   <Tab title="Client">
     ```bash
-    sm64coopdx --client 192.168.1.42 7777 ...
+    sm64coopdx --client 192.168.1.42 7777 --playername StarPlayer --playercount 8 ...
     ```
   </Tab>
   <Tab title="Server">
     ```bash
-    sm64coopdx --server 7777 ...
+    sm64coopdx --server 7777 --playername StarPlayer --playercount 8 ...
     ```
   </Tab>
   <Tab title="CoopNet">
     ```bash
-    sm64coopdx --coopnet myroom ...
+    sm64coopdx --coopnet myroom --playername StarPlayer --playercount 8 ...
     ```
   </Tab>
   <Tab title="Local">
     ```bash
-    sm64coopdx ...
-    # (no network flag)
+    sm64coopdx --playername StarPlayer ...
+    # (no network mode flag)
     ```
   </Tab>
 </Tabs>
-
-<Tip>
-  The **Player Name** set in the Network panel is a global default stored in `sm64config.txt`. If the active profile also has a **Player Name** configured in its Profile Detail screen, the profile name takes precedence — it is passed via `--playername` at launch time, overriding the config-file value.
-</Tip>
 
 ## Keyboard Shortcuts Summary
 

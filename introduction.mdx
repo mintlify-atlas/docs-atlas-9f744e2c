@@ -1,7 +1,7 @@
 ---
 title: "SM64 Coop DX Launcher: graphical game manager for Linux"
 sidebarTitle: "Introduction"
-description: "coopdx-rs is a lightweight SDL2 launcher for SM64 Coop Deluxe on Linux. Handles game detection, ROM validation, mod management, profiles, and multiplayer setup."
+description: "Lightweight SDL2 launcher for SM64 Coop Deluxe on Linux. Handles automatic game detection, ROM validation, mod management, profiles, and multiplayer setup."
 ---
 
 **coopdx-rs** is a graphical launcher for [Super Mario 64: Coop Deluxe](https://sm64coopdx.com) on Linux, built in Rust with SDL2. Rather than launching the game binary directly from a terminal, coopdx-rs gives you a full-featured, controller-friendly front-end: it finds the game automatically, validates your ROM before launch, manages mods and DynOS packs, stores per-player profiles, and lets you configure multiplayer networking — all without touching config files by hand.
@@ -26,7 +26,7 @@ The SM64 Coop Deluxe binary is a native Linux executable that accepts a large nu
 - **ROM validation** — scans common locations for a valid `baserom.us.z64` (MD5: `20b854b239203baf6c961b850a4a51a2`) and copies it to the save path before spawning the game.
 - **Gamepad support** — D-Pad navigation, A/B/X buttons, L1/R1 page-turn, and Start/Select for menu toggle; all dispatched through the same pure mapping functions covered by unit tests.
 - **Clean environment spawning** — `env_clear()` + a whitelist of safe variables (`DISPLAY`, `WAYLAND_DISPLAY`, `PULSE_SERVER`, `HOME`, etc.) prevents library conflicts inherited from Flatpak or AppImage environments.
-- **5-tier game path resolution** — CLI flag → environment variable → active profile → `launcher.toml` → automatic directory search.
+- **5-tier game path resolution** — `--game-path` CLI flag → `SM64COOPDX_PATH` environment variable → active profile override → `launcher.toml` → automatic directory search.
 - **Splash screen with progress bar** — assets are loaded sequentially during a smooth splash animation before the main UI appears.
 - **Music player** — cycles through `.ogg` tracks from the assets directory with a spinning vinyl animation; tracks auto-advance and the volume fades when the game is running.
 - **Fullscreen toggle** — press `F` at any time to switch between windowed and desktop-fullscreen mode.

@@ -1,27 +1,33 @@
 ---
 title: "Diagnose and fix common SM64 Coop DX Launcher errors"
 sidebarTitle: "Common Errors"
-description: "Solutions for the most common launcher errors: game binary not found, missing language file, no valid ROM, SDL2 initialization failures, and save path permission issues."
+description: "Solutions for launcher errors: game binary not found, missing language file, no valid ROM, SDL2 init failures, and save directory permission issues."
 ---
 
-When something goes wrong, the launcher displays a red error message beneath the logo on the main screen. Most failures fall into one of five categories: the game binary cannot be found, a language file is missing from the installation, no valid ROM was located, SDL2 cannot initialize, or the save directory is not writable. The quick-reference table below maps each error to its root cause and the fastest fix, followed by detailed accordion sections for each category.
+When something goes wrong, the launcher displays the error message as red text beneath the logo on the main screen. Most failures fall into one of five categories: the game binary cannot be found, a language file is missing from the installation, no valid ROM was located, SDL2 cannot initialize, or the save directory is not writable. The quick-reference table below maps each error to its root cause and the fastest fix, followed by detailed accordion sections for each category.
 
 ## Quick reference
 
 | Error | Cause | Solution |
 |-------|-------|----------|
-| Game binary not found | Binary path unresolved through all 5 tiers | Set `SM64COOPDX_PATH` or configure `launcher.toml` |
-| Language file not found | Incomplete game installation | Re-extract the full game archive |
-| No valid SM64 US ROM found | ROM absent or wrong MD5 hash | Place `baserom.us.z64` in the game directory |
-| Savepath not writable | Insufficient file permissions | `chmod -R u+rw ~/.local/share/sm64coopdx/` |
+| `Game binary not found: {path}` | Binary path unresolved through all 5 tiers | Set `SM64COOPDX_PATH` or configure `launcher.toml` |
+| `Language file not found: {path}` | Incomplete game installation | Re-extract the full game archive |
+| `No valid Super Mario 64 US ROM found.` | ROM absent or wrong MD5 hash | Place `baserom.us.z64` in the game directory |
+| `Savepath {path} is not writable: {err}` | Insufficient file permissions | `chmod -R u+rw ~/.local/share/sm64coopdx/` |
 
 ---
 
 ## Game binary errors
 
-<Accordion title='"Game binary not found" — binary path resolution failed'>
+<Accordion title='"Game binary not found: {path}" — binary path resolution failed'>
 
-The launcher resolves the `sm64coopdx` binary through five tiers in order. If a tier points to a non-existent file the launcher falls through to the next one automatically. When every tier is exhausted and no file is found, `spawn_game` returns this error.
+The launcher resolves the `sm64coopdx` binary through five tiers in order. If a tier points to a non-existent file the launcher falls through to the next one automatically. When every tier is exhausted and no file is found, `spawn_game` returns:
+
+```
+Game binary not found: /path/to/sm64coopdx
+```
+
+The error is displayed as red text on the launcher screen.
 
 **Resolution tiers (highest to lowest priority)**
 
@@ -85,9 +91,18 @@ The launcher resolves the `sm64coopdx` binary through five tiers in order. If a 
 
 ## ROM errors
 
-<Accordion title='"No valid SM64 US ROM found" — ROM absent or wrong MD5'>
+<Accordion title='"No valid Super Mario 64 US ROM found." — ROM absent or wrong MD5'>
 
-Before launching the game, the launcher searches for a `.z64` file whose MD5 hash exactly matches the Super Mario 64 US ROM. If no matching file is found across all search locations the launch is aborted.
+Before launching the game, the launcher searches for a `.z64` file whose MD5 hash exactly matches the Super Mario 64 US ROM. If no matching file is found across all search locations the launch is aborted with the following error (rendered in red on the launcher screen):
+
+```
+No valid Super Mario 64 US ROM found.
+Expected MD5: 20b854b239203baf6c961b850a4a51a2
+Place 'baserom.us.z64' in one of these locations:
+- /path/to/game/dir
+- /home/user/.local/share/sm64coopdx
+Or set [game].rom_path in ~/.config/sm64coopdx/launcher.toml
+```
 
 **Expected MD5:** `20b854b239203baf6c961b850a4a51a2`
 
@@ -119,12 +134,12 @@ rom_path = "/path/to/Super Mario 64 (USA).z64"
 Once the launcher finds a valid ROM, it copies it to `~/.local/share/sm64coopdx/baserom.us.z64` and reuses that copy on subsequent launches (skipping the copy step if the file is already present and valid).
 
 <Warning>
-  Do not rename the ROM to `baserom.us.z64` yourself and place it in the save directory while the launcher is running — the launcher validates it by MD5, not filename, so a corrupt or wrong-region file with the right name will still be rejected.
+  Do not rename the ROM to `baserom.us.z64` yourself and place it in the save directory while the launcher is running — the launcher validates by MD5, not filename, so a corrupt or wrong-region file with the right name will still be rejected.
 </Warning>
 
 </Accordion>
 
-<Accordion title="Game freezes on &quot;Loading ROM Assets&quot;">
+<Accordion title='Game freezes on "Loading ROM Assets"'>
 
 This screen appears when the game process starts but cannot read the ROM from the save directory. The most common cause is that the ROM copy step succeeded but the resulting file at `~/.local/share/sm64coopdx/baserom.us.z64` is not readable by the game process.
 
@@ -152,9 +167,15 @@ rm ~/.local/share/sm64coopdx/baserom.us.z64
 
 ## Language and installation errors
 
-<Accordion title='"Language file not found" — incomplete game installation'>
+<Accordion title='"Language file not found: {path}" — incomplete game installation'>
 
-After resolving the game binary path, the launcher calls `validate_game_installation()`, which checks that `{game_dir}/lang/English.ini` exists next to the binary. If this file is missing the launch is blocked with this error.
+After resolving the game binary path, the launcher calls `validate_game_installation()`, which checks that `{game_dir}/lang/English.ini` exists next to the binary. If this file is missing, the launch is blocked and the following error is shown in red on the launcher screen:
+
+```
+Language file not found: /path/to/game/lang/English.ini
+The game installation seems incomplete. Make sure the 'lang/' directory
+is present next to the game binary.
+```
 
 **Cause:** The game release archive was not fully extracted, or only the binary was copied without its supporting files.
 
@@ -243,9 +264,19 @@ cp -r /path/to/launcher/assets/* ~/.local/share/sm64coopdx/assets/
 
 ## Permission errors
 
-<Accordion title='"Savepath is not writable" — cannot write to the save directory'>
+<Accordion title='"Savepath {path} is not writable: {err}" — cannot write to the save directory'>
 
-Before spawning the game, `validate_game_installation()` writes a temporary probe file (`.launcher_write_test`) to `~/.local/share/sm64coopdx/` to confirm it is writable. If this write fails, the error is shown and the launch is cancelled.
+Before spawning the game, `validate_game_installation()` writes a temporary probe file (`.launcher_write_test`) to the save directory to confirm it is writable. If this write fails, the error is shown in red on the launcher screen and the launch is cancelled:
+
+```
+Savepath /home/user/.local/share/sm64coopdx is not writable: permission denied
+```
+
+If the save directory does not yet exist, the launcher attempts to create it first via `fs::create_dir_all`. If that creation fails, a separate error is shown:
+
+```
+Cannot create savepath /home/user/.local/share/sm64coopdx: permission denied
+```
 
 **Fix — restore user ownership and write permissions:**
 
@@ -260,7 +291,7 @@ sudo chown -R "$USER":"$USER" ~/.local/share/sm64coopdx/
 chmod -R u+rw ~/.local/share/sm64coopdx/
 ```
 
-If the directory does not exist yet the launcher will attempt to create it via `fs::create_dir_all`. A creation failure typically means the parent path (`~/.local/share/`) is not writable, which points to a broader home-directory permission problem.
+If the directory does not exist yet and the parent path (`~/.local/share/`) is not writable, this points to a broader home-directory permission problem that must be resolved at the filesystem level.
 
 <Note>
   The game process is spawned with a clean, whitelisted environment (no `LD_PRELOAD`, no `LD_LIBRARY_PATH`). Permission errors in the save directory are always a filesystem issue, not an environment one.

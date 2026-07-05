@@ -1,7 +1,7 @@
 ---
-title: "Get started with SM64 Coop DX Launcher"
+title: "Quickstart: run SM64 Coop Deluxe with the coopdx-rs launcher"
 sidebarTitle: "Quickstart"
-description: "Launch SM64 Coop Deluxe in under 5 minutes: build the launcher, place your ROM, and run. The launcher auto-detects the game binary and validates your setup."
+description: "Launch SM64 Coop Deluxe in under 5 minutes: build the launcher, place your ROM, and run. The launcher auto-detects the game binary and validates setup."
 ---
 
 This guide takes you from a fresh clone to an in-game session of SM64 Coop Deluxe. The only prerequisites are a working [installation of coopdx-rs](/installation) and a copy of the SM64 US ROM and the `sm64coopdx` game binary.
@@ -85,7 +85,7 @@ The launcher uses a strict five-tier priority system to locate the `sm64coopdx` 
 | 2 | `SM64COOPDX_PATH` env var | `export SM64COOPDX_PATH=/opt/sm64/sm64coopdx` |
 | 3 | Active profile → `profile.json` → `game_path` field | `~/.local/share/sm64coopdx/profiles/<name>/profile.json` |
 | 4 | `launcher.toml` → `[game].path` | `~/.config/sm64coopdx/launcher.toml` |
-| 5 (default) | Automatic directory search | Scans `./`, `../`, and `~/sm64coopdx_Linux-*/` |
+| 5 (default) | Automatic directory search | `<launcher_dir>/../games/mario64/sm64coopdx`, `<launcher_dir>/sm64coopdx`, `<launcher_dir>/../sm64coopdx`, `~/sm64coopdx_Linux-*/sm64coopdx` |
 
 All resolved paths are canonicalized to absolute form (symlinks resolved) so that the game's working directory is set correctly at spawn time.
 
