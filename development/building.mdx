@@ -1,0 +1,121 @@
+---
+title: "Build SM64 Coop DX Launcher from source"
+sidebarTitle: "Building"
+description: "Build coopdx-rs from source. Requires Rust 1.85 (edition 2024), SDL2 dev libraries on Linux, and Cargo. The release binary is stripped and LTO-optimized."
+---
+
+Building coopdx-rs from source gives you full control over the binary — debug symbols for development, or a size-optimized release binary for distribution. The project uses a standard Cargo workspace with no custom build scripts; the only external requirement beyond Rust itself is the SDL2 family of system libraries.
+
+## Prerequisites
+
+Before building, make sure you have the following installed on your system.
+
+<Note>
+  coopdx-rs targets **Rust edition 2024**, which requires Rust **1.85 or later**. Earlier toolchain versions will fail to compile. Run `rustup update stable` to update if needed.
+</Note>
+
+**Rust toolchain** — Install via [rustup.rs](https://rustup.rs):
+
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```
+
+**SDL2 development libraries** — The launcher links against SDL2, SDL2\_image, SDL2\_mixer, and SDL2\_ttf at compile time. Install the `*-dev` packages for your distribution:
+
+<Tabs>
+  <Tab title="Debian / Ubuntu">
+    ```bash
+    sudo apt install libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev
+    ```
+  </Tab>
+  <Tab title="Arch Linux">
+    ```bash
+    sudo pacman -S sdl2 sdl2_image sdl2_mixer sdl2_ttf
+    ```
+  </Tab>
+  <Tab title="Fedora">
+    ```bash
+    sudo dnf install SDL2-devel SDL2_image-devel SDL2_mixer-devel SDL2_ttf-devel
+    ```
+  </Tab>
+</Tabs>
+
+<Warning>
+  All four SDL2 libraries are required. A partial installation — for example, missing `SDL2_ttf` — will cause a linker error during `cargo build`.
+</Warning>
+
+## Build commands
+
+Clone the repository and build with Cargo as usual. There are no code-generation steps or extra setup targets.
+
+```bash
+# Debug build (fast compilation, unoptimized, with debug symbols)
+cargo build
+
+# Release build (optimized, stripped, LTO — see profile details below)
+cargo build --release
+# Output binary: target/release/sm64coopdx-launcher
+```
+
+<Tip>
+  During development, use the debug build for faster iteration. Switch to `--release` when packaging or measuring performance — the size and speed difference is substantial due to the `opt-level = "z"` and LTO settings.
+</Tip>
+
+## Release profile settings
+
+The `[profile.release]` section in `Cargo.toml` is tuned for a small, fast distribution binary:
+
+```toml
+[profile.release]
+opt-level = "z"      # Optimize for binary size
+lto = true           # Link-time optimization (cross-crate inlining)
+strip = true         # Strip debug symbols from the output binary
+codegen-units = 1    # Single codegen unit for maximum optimization
+```
+
+| Setting | Value | Effect |
+|---|---|---|
+| `opt-level` | `"z"` | Minimizes binary size, accepting slightly slower code than `"3"` |
+| `lto` | `true` | Enables full link-time optimization across all crates |
+| `strip` | `true` | Removes debug symbols; the output binary contains no DWARF data |
+| `codegen-units` | `1` | Forces a single compilation unit, allowing maximum inlining and dead-code elimination |
+
+<Note>
+  `strip = true` means `target/release/sm64coopdx-launcher` cannot be used with `rust-gdb` or `rust-lldb` directly. If you need to debug a release build, temporarily set `strip = false` and `opt-level = 1`.
+</Note>
+
+## Testing and linting
+
+The project ships with a unit test suite covering the gamepad input mapping and other pure functions:
+
+```bash
+# Run the full test suite (122 unit tests)
+cargo test
+
+# Run Clippy lints
+cargo clippy
+```
+
+<Tip>
+  The gamepad tests in `gp_tests` (`joy_a_is_confirm`, `hat_up_is_nav_up`, etc.) require no SDL2 context and run instantly. They validate the same `joy_button_to_action` and `hat_to_action` pure functions that the real event loop dispatches through, so passing tests mean the gamepad input paths are correct.
+</Tip>
+
+## Dependencies
+
+All dependencies are declared in `Cargo.toml`. No vendoring or patching is required; `cargo build` fetches them from crates.io automatically.
+
+| Crate | Version | Purpose |
+|---|---|---|
+| `sdl2` | 0.38 | Window, renderer, input, audio — core runtime |
+| `serde` + `serde_json` | 1 | Config serialization (profiles, mod database) |
+| `reqwest` | 0.12 (blocking) | HTTP downloads in the mod Download Browser |
+| `zip` | 2 | ZIP extraction for downloaded mod archives |
+| `ctrlc` | 3 | Graceful Ctrl+C shutdown signal handling |
+| `dirs` | 5 | XDG directory resolution (`~/.local/share`, `~/.config`) |
+| `toml` | 0.8 | Parsing `launcher.toml` configuration files |
+| `log` + `env_logger` | 0.4 / 0.11 | Structured logging (set `RUST_LOG=debug` to enable) |
+| `md5` | 0.7 | ROM file validation (checks the US SM64 baserom MD5) |
+
+<Note>
+  The `sdl2` crate is built with four features: `image`, `mixer`, `ttf`, and `unsafe_textures`. The `unsafe_textures` feature makes `Texture` `'static` by removing phantom lifetime parameters. This eliminates borrow-checker conflicts between `Canvas` and `Texture` during rendering and is the standard production pattern for SDL2 Rust applications — it carries no additional unsafety beyond the underlying C FFI that the crate wraps.
+</Note>

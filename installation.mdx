@@ -1,0 +1,150 @@
+---
+title: "Install SM64 Coop DX Launcher on Linux"
+sidebarTitle: "Installation"
+description: "Build coopdx-rs from source on Linux. Requires Rust 1.85+, SDL2 dev libraries, and SDL2_image, SDL2_mixer, SDL2_ttf."
+---
+
+coopdx-rs is distributed as source code and must be compiled on your machine. The build produces a single self-contained binary at `target/release/sm64coopdx-launcher`. This page walks through every step, from installing system libraries to copying the launcher assets into place.
+
+## System requirements
+
+| Requirement | Minimum version | Notes |
+|---|---|---|
+| Linux | Any modern distro | Tested on Debian/Ubuntu and Arch-based systems |
+| Rust toolchain | **1.85+** (edition 2024) | Install via [rustup](https://rustup.rs) |
+| `libsdl2-dev` | 2.x | Core SDL2 windowing and input |
+| `libsdl2-image-dev` | 2.x | PNG texture loading |
+| `libsdl2-mixer-dev` | 2.x | OGG music and WAV sound effects |
+| `libsdl2-ttf-dev` | 2.x | TrueType font rendering |
+| SM64 US ROM | — | MD5: `20b854b239203baf6c961b850a4a51a2` |
+
+<Note>
+  The SM64 US ROM (`baserom.us.z64`) is required to play but is **not** included in this repository. You must supply a legally obtained copy. The launcher validates the file by MD5 checksum (`20b854b239203baf6c961b850a4a51a2`) before every launch and will display an error if the ROM is missing or invalid.
+</Note>
+
+## Step 1 — Install SDL2 system libraries
+
+<Tabs>
+  <Tab title="Debian / Ubuntu">
+    ```bash
+    sudo apt update
+    sudo apt install -y \
+      libsdl2-dev \
+      libsdl2-image-dev \
+      libsdl2-mixer-dev \
+      libsdl2-ttf-dev
+    ```
+  </Tab>
+  <Tab title="Arch Linux">
+    ```bash
+    sudo pacman -S --needed \
+      sdl2 \
+      sdl2_image \
+      sdl2_mixer \
+      sdl2_ttf
+    ```
+  </Tab>
+</Tabs>
+
+## Step 2 — Install the Rust toolchain
+
+If you don't already have Rust installed, use the official `rustup` installer. The launcher requires **Rust 1.85 or later** (it uses edition 2024 features).
+
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source "$HOME/.cargo/env"
+rustup update stable
+rustc --version   # should print rustc 1.85.0 or newer
+```
+
+<Tip>
+  If you already have Rust installed via your distro's package manager it may be too old. Run `rustup update` or reinstall via rustup to get the latest stable release.
+</Tip>
+
+## Step 3 — Clone and build
+
+```bash
+git clone https://github.com/retired64/sm64coopdx_launcher
+cd sm64coopdx_launcher
+cargo build --release
+```
+
+The release profile is configured for maximum size reduction (`opt-level = "z"`, LTO, strip, `codegen-units = 1`), so the initial build may take a couple of minutes. The resulting binary is placed at:
+
+```
+target/release/sm64coopdx-launcher
+```
+
+You can run it directly from there or copy it anywhere on your `PATH`.
+
+## Step 4 — Run the test suite (optional)
+
+The project ships **122 unit tests** covering game-path resolution, ROM validation, mod argument construction, network argument building, and gamepad button mapping.
+
+```bash
+# Run all tests
+cargo test
+
+# Run linter (zero warnings expected)
+cargo clippy
+```
+
+<Tip>
+  Running `cargo test` before first use is a good sanity check — it verifies that the SDL2 libraries are linked correctly and that your Rust version supports all the edition-2024 features used by the codebase.
+</Tip>
+
+## Step 5 — Install launcher assets
+
+The launcher loads its sprites, sounds, music tracks, mod database, and font from `~/.local/share/sm64coopdx/assets/`. Copy the bundled `assets/` directory into place:
+
+```bash
+mkdir -p ~/.local/share/sm64coopdx/assets
+cp -r assets/* ~/.local/share/sm64coopdx/assets/
+```
+
+After this step, the assets directory should contain at minimum:
+
+| Path | Purpose |
+|---|---|
+| `assets/fonts/SuperMario256.ttf` | UI font |
+| `assets/splash.png` | Splash screen background |
+| `assets/background.png` | Main screen background |
+| `assets/logo.png` | SM64 Coop DX logo |
+| `assets/vinyl_disc.png` | Spinning vinyl animation |
+| `assets/sounds/navigation_sound.wav` | Menu navigation click |
+| `assets/sounds/splash_sound.wav` | Splash intro sound |
+| `assets/ogg-sounds/` | Background music tracks (`.ogg`) |
+| `assets/database_sm64coopdx.json` | Mod download database |
+
+<Warning>
+  The launcher will fail to start if the splash screen image (`splash.png`) or the font file (`SuperMario256.ttf`) are missing. Make sure the `cp -r` command above completes without errors before running the binary.
+</Warning>
+
+## Step 6 — Verify the installation
+
+Run the launcher to confirm everything is in order:
+
+```bash
+./target/release/sm64coopdx-launcher
+```
+
+You should see the splash screen load with a progress bar, then transition to the main game screen. If the game binary is not yet configured you will see a "Game binary not found" message — that is expected at this stage and is resolved in the [Quickstart](/quickstart).
+
+## What's next?
+
+<CardGroup cols={2}>
+  <Card
+    title="Quickstart"
+    icon="rocket"
+    href="/quickstart"
+  >
+    Configure the game path, place your ROM, and launch SM64 Coop Deluxe for the first time.
+  </Card>
+  <Card
+    title="Introduction"
+    icon="book"
+    href="/introduction"
+  >
+    Learn about the launcher's features, architecture, and how it fits into the SM64 Coop DX ecosystem.
+  </Card>
+</CardGroup>

@@ -1,0 +1,149 @@
+---
+title: "sm64config.txt key reference"
+sidebarTitle: "sm64config.txt"
+description: "Reference for the sm64config.txt keys that the launcher reads and writes. Covers mod enable lines, DynOS pack lines, and network configuration fields."
+---
+
+The `sm64config.txt` file is a plain-text key-value configuration file used by both the launcher and the `sm64coopdx` game binary. Each line holds a single directive. The launcher reads and writes a subset of well-known keys while preserving all other lines it does not recognise — so game settings you configure inside the game itself are never clobbered.
+
+There are two copies of this file the launcher interacts with:
+
+- **Shared config** at `~/.local/share/sm64coopdx/sm64config.txt` — used by the launcher's Mod Manager, DynOS Manager, and Network screens as the global baseline.
+- **Per-profile config** at `~/.local/share/sm64coopdx/profiles/<name>/sm64config.txt` — passed to the game binary via `--configfile` when it is non-empty. Created by copying the shared config when a new profile is first created.
+
+<Note>
+  When the game exits, any changes the game itself writes back to the per-profile config (key bindings, graphics settings, etc.) are preserved. The launcher only rewrites lines it owns; all other lines are carried through unchanged.
+</Note>
+
+---
+
+## Mod configuration
+
+Mod enable lines tell the game which Lua mods to activate at startup.
+
+### `enable-mod: <name>`
+
+Enables a mod by its **filename stem** (for `.lua` files) or **folder name** (for mod directories containing `main.lua`). There is one `enable-mod:` line per enabled mod.
+
+```
+enable-mod: cool_mod
+enable-mod: another_mod
+enable-mod: my_folder_mod
+```
+
+- The launcher writes one line per mod that has been toggled on in the Mod Manager screen.
+- If no mods are enabled, the launcher passes `--disable-mods` to the game binary instead of writing any `enable-mod:` lines.
+- The `enable-mod:` prefix (with a trailing space and colon) is the canonical form. The launcher also accepts `enable-mod:` without a trailing space as a legacy variant.
+
+---
+
+## DynOS pack configuration
+
+DynOS pack lines tell the game which resource packs (character models, textures, etc.) to load.
+
+### `dynos-pack: <name>`
+
+Enables a DynOS pack by its **directory name** inside `dynos/packs/`. There is one `dynos-pack:` line per enabled pack.
+
+```
+dynos-pack: Mario
+dynos-pack: luigi_pack
+```
+
+- The launcher scans `~/.local/share/sm64coopdx/dynos/packs/` for subdirectories and shows each one as a toggleable item.
+- Enabling a pack from the DynOS Manager screen appends a `dynos-pack:` line; disabling it removes the corresponding line.
+- Lines unrelated to `dynos-pack:` (mod lines, network lines, etc.) are never touched when the DynOS section is rewritten.
+
+---
+
+## Network configuration
+
+Network keys control how the game connects to other players. The launcher reads and writes all seven keys listed below as a block, preserving all non-network lines from the existing file when it writes.
+
+### `coop_player_name`
+
+Player display name shown to other players in multiplayer sessions.
+
+```
+coop_player_name SuperPlayer
+```
+
+### `coop_join_ip`
+
+Server IP address used in **Client** mode when joining an existing hosted game.
+
+```
+coop_join_ip 192.168.1.100
+```
+
+### `coop_join_port`
+
+Server port used in **Client** mode. Defaults to `7777`.
+
+```
+coop_join_port 7777
+```
+
+### `coop_host_port`
+
+Listen port used when running in **Server** mode. Defaults to `7777`.
+
+```
+coop_host_port 7777
+```
+
+### `amount_of_players`
+
+Maximum number of players allowed in the session. Defaults to `16`.
+
+```
+amount_of_players 8
+```
+
+### `coop_network_system`
+
+Selects the network backend:
+
+| Value | Mode |
+|-------|------|
+| `0` | Local, Client, or Server (direct IP) |
+| `1` | CoopNet (matchmaking service) |
+
+```
+coop_network_system 0
+```
+
+<Note>
+  `Client` and `Server` modes are not distinguished by `coop_network_system`. The distinction is made through the game CLI arguments (`--client` vs `--server`) that the launcher builds from the Network screen selection, not from this config key.
+</Note>
+
+### `coopnet_password`
+
+Room password used in **CoopNet** mode. Leave empty for a public room.
+
+```
+coopnet_password mySecretRoom
+```
+
+---
+
+## Sample sm64config.txt
+
+The following shows a representative file combining all three sections:
+
+```
+enable-mod: cool_mod
+enable-mod: another_mod
+dynos-pack: Mario
+coop_player_name SuperPlayer
+coop_join_ip
+coop_join_port 7777
+coop_host_port 7777
+amount_of_players 8
+coop_network_system 0
+coopnet_password
+```
+
+<Tip>
+  You can edit `sm64config.txt` by hand while the launcher is not running. Any key the launcher does not manage (graphics settings, key bindings, audio volume, etc.) is completely unaffected by launcher operations.
+</Tip>

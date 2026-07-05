@@ -1,0 +1,73 @@
+---
+title: "SM64 Coop DX Launcher: graphical game manager for Linux"
+sidebarTitle: "Introduction"
+description: "coopdx-rs is a lightweight SDL2 launcher for SM64 Coop Deluxe on Linux. Handles game detection, ROM validation, mod management, profiles, and multiplayer setup."
+---
+
+**coopdx-rs** is a graphical launcher for [Super Mario 64: Coop Deluxe](https://sm64coopdx.com) on Linux, built in Rust with SDL2. Rather than launching the game binary directly from a terminal, coopdx-rs gives you a full-featured, controller-friendly front-end: it finds the game automatically, validates your ROM before launch, manages mods and DynOS packs, stores per-player profiles, and lets you configure multiplayer networking — all without touching config files by hand.
+
+## Why a dedicated launcher?
+
+The SM64 Coop Deluxe binary is a native Linux executable that accepts a large number of command-line flags (`--enable-mod`, `--server`, `--client`, `--playername`, `--savepath`, and more). Keeping those flags consistent across play sessions, managing multiple player profiles, and toggling mods without restarting manually is tedious. coopdx-rs solves this by:
+
+- Storing your configuration persistently across sessions.
+- Building the correct CLI invocation automatically at launch time.
+- Spawning the game with a clean, minimal environment (stripping `LD_LIBRARY_PATH`, `LD_PRELOAD`, and other variables that can cause crashes).
+- Validating the SM64 US ROM (MD5 `20b854b239203baf6c961b850a4a51a2`) and copying it to the game's save path before every launch.
+- Keeping launcher state and game state isolated so profiles, mods, and network settings persist even after the game exits.
+
+## Key features
+
+- **Mod manager** — toggle Lua mods on and off; the launcher passes `--enable-mod` (or `--disable-mods`) to the binary at launch time.
+- **DynOS pack manager** — enable or disable DynOS resource packs stored in `~/.local/share/sm64coopdx/dynos/packs/`.
+- **Player profiles** — create, rename, activate, and delete named profiles, each with its own `sm64config.txt`, player name, skip-intro flag, fullscreen setting, and optional per-profile game binary path.
+- **Network configuration** — graphical form for Local, Server, Client (direct IP), and CoopNet multiplayer modes; settings are written to `sm64config.txt` automatically.
+- **Download browser** — browse and download mods directly from the built-in mod database (`database_sm64coopdx.json`), with tag filtering, author filtering, and full-text search.
+- **ROM validation** — scans common locations for a valid `baserom.us.z64` (MD5: `20b854b239203baf6c961b850a4a51a2`) and copies it to the save path before spawning the game.
+- **Gamepad support** — D-Pad navigation, A/B/X buttons, L1/R1 page-turn, and Start/Select for menu toggle; all dispatched through the same pure mapping functions covered by unit tests.
+- **Clean environment spawning** — `env_clear()` + a whitelist of safe variables (`DISPLAY`, `WAYLAND_DISPLAY`, `PULSE_SERVER`, `HOME`, etc.) prevents library conflicts inherited from Flatpak or AppImage environments.
+- **5-tier game path resolution** — CLI flag → environment variable → active profile → `launcher.toml` → automatic directory search.
+- **Splash screen with progress bar** — assets are loaded sequentially during a smooth splash animation before the main UI appears.
+- **Music player** — cycles through `.ogg` tracks from the assets directory with a spinning vinyl animation; tracks auto-advance and the volume fades when the game is running.
+- **Fullscreen toggle** — press `F` at any time to switch between windowed and desktop-fullscreen mode.
+
+## How it fits into the SM64 Coop DX ecosystem
+
+SM64 Coop Deluxe (`sm64coopdx`) is the game binary you obtain separately, typically as a Linux release archive. coopdx-rs sits in front of that binary and acts as a configuration and launch manager:
+
+```text
+coopdx-rs (launcher)
+    │
+    ├── reads ~/.config/sm64coopdx/launcher.toml
+    ├── reads ~/.local/share/sm64coopdx/profiles/<name>/profile.json
+    ├── reads ~/.local/share/sm64coopdx/sm64config.txt
+    ├── validates ROM (MD5 check) and copies to save path
+    │
+    └── spawns → sm64coopdx (game binary)
+                    --savepath ~/.local/share/sm64coopdx/
+                    --configfile <profile>/sm64config.txt
+                    --enable-mod <mod> ...
+                    --server / --client / --coopnet ...
+                    --playername <name>
+```
+
+The launcher shares the `~/.local/share/sm64coopdx/` data directory with the game so that saves, config, mods, and DynOS packs are visible to both.
+
+## Get started
+
+<CardGroup cols={2}>
+  <Card
+    title="Installation"
+    icon="wrench"
+    href="/installation"
+  >
+    Build coopdx-rs from source. Covers system dependencies, Rust toolchain setup, and asset installation.
+  </Card>
+  <Card
+    title="Quickstart"
+    icon="rocket"
+    href="/quickstart"
+  >
+    Place your ROM, run the launcher, and press Enter to play — from zero to in-game in under five minutes.
+  </Card>
+</CardGroup>

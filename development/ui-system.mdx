@@ -1,0 +1,244 @@
+---
+title: "UI system: SDL2 panels, menu, keyboard, and download browser"
+sidebarTitle: "UI System"
+description: "Overview of the SDL2-based UI system in coopdx-rs: the arc menu, sliding panel system, virtual keyboard, vinyl animation, and download browser rendering."
+---
+
+The coopdx-rs launcher renders everything through SDL2 — there is no native widget toolkit. All UI elements are drawn each frame using textured quads, software-rasterised rounded rectangles, and pre-rendered TTF glyphs cached as SDL2 textures. The `src/ui/` directory contains nine modules that together form the complete UI layer.
+
+---
+
+## UI module overview
+
+<CardGroup cols={3}>
+  <Card title="common" icon="grid">
+    Shared types and rendering helpers: `UiItem`, `ItemType`, `draw_item_selector`, `ensure_selection_visible`. Used by every sub-screen that renders a scrollable item list.
+  </Card>
+  <Card title="menu" icon="bars">
+    Arc menu with 5 items arranged in a curved panel on the right side of the screen: Mod Manager, DynOS Packs, Network, Download Mods, Settings. Hit-testing and animation state live here.
+  </Card>
+  <Card title="panel" icon="sidebar">
+    `PanelState` — the sliding side panel that hosts all sub-screens. Handles smooth `slide_x` animation, rounded-corner background rendering, header/footer caching, and `SubScreenType` dispatch.
+  </Card>
+  <Card title="splash" icon="spinner">
+    `SplashState` — 7-phase loading progress bar shown during startup asset loading. Manages fade-in, progress animation, and the transition signal to the main game screen.
+  </Card>
+  <Card title="vinyl" icon="record-vinyl">
+    Animated spinning vinyl disc rendered in the bottom-right corner of the main screen. Rotates at `VINYL_ROT_SPEED = 90°/s` and dims when a sub-screen is open.
+  </Card>
+  <Card title="logo" icon="image">
+    Game logo rendering with a drop shadow offset (`SHADOW_OFFSET = 8px`). The logo is scaled to fit within `MAX_LOGO_W × MAX_LOGO_H = 900 × 450` pixels while preserving aspect ratio.
+  </Card>
+  <Card title="keyboard" icon="keyboard">
+    `VirtualKeyboard` — on-screen keyboard overlay for text input in SDL2. Used whenever a text field is activated (network fields, profile names). Characters are appended to a caller-supplied buffer.
+  </Card>
+  <Card title="network_form" icon="network-wired">
+    `NetworkFormState` — renders the network configuration form. Shows different fields depending on the active `NetworkMode`: no extra fields for Local, IP+port for Client, port for Server, password for CoopNet.
+  </Card>
+  <Card title="download_browser" icon="download">
+    `DownloadBrowserState`, `DlFocusMode` — the full download browser UI including search bar, tag chips, author dropdown, paginated mod list, and download progress overlay.
+  </Card>
+</CardGroup>
+
+---
+
+## SubScreenType enum
+
+The panel system routes keyboard input and rendering to the correct sub-screen using the `SubScreenType` enum defined in `src/ui/panel.rs`:
+
+```rust
+pub enum SubScreenType {
+    ModManager,
+    DynosPacks,
+    Network,
+    DownloadBrowser,
+    Profiles,
+    ProfileDetail,
+}
+```
+
+Each variant maps to a header label displayed at the top of the panel:
+
+| Variant | Header Label |
+|---------|-------------|
+| `ModManager` | `MOD MANAGER` |
+| `DynosPacks` | `DYNOS PACKS` |
+| `Network` | `NETWORK` |
+| `DownloadBrowser` | `DOWNLOAD MODS` |
+| `Profiles` | `PROFILES` |
+| `ProfileDetail` | `PROFILE` |
+
+The mapping from arc-menu button index to sub-screen is handled by `subscreen_for_menu_index(idx: usize) -> Option<SubScreenType>`. Indices 0–4 map to ModManager, DynosPacks, Network, DownloadBrowser, and Profiles respectively.
+
+---
+
+## Panel system
+
+`PanelState` in `src/ui/panel.rs` drives all sub-screens. It maintains a continuous `slide_x` value that eases toward either a visible or a hidden `target_x` position, giving the panel a smooth slide-in/slide-out animation.
+
+```rust
+pub struct PanelState {
+    pub slide_x: f64,
+    pub active: Option<SubScreenType>,
+    pub header_extra: Option<String>,
+    pub footer_hint: Option<String>,
+    // … cached SDL2 textures for header and footer text
+}
+```
+
+Key constants and ratios:
+
+| Constant | Value | Meaning |
+|----------|-------|---------|
+| `PANEL_W_RATIO` | `0.62` | Panel width as a fraction of window width |
+| `PANEL_H_RATIO` | `0.72` | Panel height as a fraction of window height |
+| `SLIDE_SPEED` | `8.0` | Exponential easing multiplier per second |
+| `HEADER_H` | `48 px` | Height of the header band |
+| `FOOTER_H` | `36 px` | Height of the footer hint band |
+| `CORNER_RADIUS` | `16 px` | Rounded corner radius |
+
+### Rounded corners
+
+The panel background is rendered without any native rounded-rectangle primitive (no SDL2_gfx dependency). Instead, `make_rounded_bg` pre-renders an ARGB8888 surface, fills it with `PANEL_BG` (`rgba(10, 5, 30, 230)`), and sets corner pixels outside the radius to fully transparent using a midpoint-circle test. The resulting texture is cached in `PanelState` and only regenerated on window resize.
+
+### Opening and closing
+
+```rust
+impl PanelState {
+    pub fn open(&mut self, sub_type: SubScreenType, win_w: u32)
+    pub fn close(&mut self, win_w: u32)
+    pub fn update(&mut self, dt: f64, win_w: u32)
+    pub fn is_visible(&self, win_w: u32) -> bool
+}
+```
+
+`open` sets `active` and moves `target_x` to the panel's centred visible position. `close` moves `target_x` to `win_w` (fully off-screen). `update` advances `slide_x` each frame using the formula `slide_x += (target_x - slide_x) * (SLIDE_SPEED * dt).min(1.0)`, and clears `active` once the panel is fully hidden.
+
+The panel body area (below the header, above the footer) is computed by `panel_body_rect(win_w, win_h, slide_x) -> Rect`. Sub-screens use this rect as their drawing region.
+
+---
+
+## Arc menu
+
+The arc menu in `src/ui/menu.rs` presents five buttons in a curved layout on the right side of the screen. Buttons are offset horizontally according to their distance from the centre item, creating the characteristic arc shape.
+
+```rust
+pub static MENU_ITEMS: [ArcMenuItem; MENU_ITEM_COUNT] = [
+    ArcMenuItem { label: "Mod Manager",   icon: "*" },
+    ArcMenuItem { label: "DynOS Packs",   icon: "#" },
+    ArcMenuItem { label: "Network",       icon: "~" },
+    ArcMenuItem { label: "Download Mods", icon: "v" },
+    ArcMenuItem { label: "Settings",      icon: "=" },
+];
+```
+
+The menu supports both keyboard navigation (W/S or Up/Down to cycle, with wraparound) and mouse hit-testing via `hit_test_menu_button(mouse_x, mouse_y, win_w, win_h) -> Option<usize>`. The `highlight_y` float tracks the animated highlight bar position, which eases to the selected button's Y coordinate each frame.
+
+---
+
+## Virtual keyboard
+
+In an SDL2 application there is no platform text-input widget, so the launcher ships its own on-screen keyboard in `src/ui/keyboard.rs`. The `VirtualKeyboard` is used whenever a text field is activated — network form fields (IP address, ports, CoopNet password) and profile name operations (create, rename, player name edit).
+
+```rust
+pub struct VirtualKeyboard { /* opaque */ }
+
+impl VirtualKeyboard {
+    pub fn new() -> Self
+    pub fn open(&mut self)
+    pub fn close(&mut self)
+    pub fn move_up(&mut self)
+    pub fn move_down(&mut self)
+    pub fn move_left(&mut self)
+    pub fn move_right(&mut self)
+    pub fn confirm_if_active(&mut self, buffer: &mut String) -> bool
+    pub fn active: bool  // field
+}
+```
+
+The keyboard renders as an overlay on top of the current sub-screen. Arrow keys (or D-pad) navigate between keys. Enter/Space confirms the current character and appends it to the `buffer`. A second Enter on the confirmation key (typically `OK` / `↵`) returns `true` from `confirm_if_active`, signalling the caller to commit the edit.
+
+<Tip>
+On desktop systems SDL2 delivers `TextInput` events for physical keyboard typing. The launcher's event loop appends alphanumeric characters and permitted punctuation (`. - _ @ space`) directly to the edit buffer, so the virtual keyboard is mainly useful for Steam Deck / gamepad users.
+</Tip>
+
+---
+
+## UiItem and ItemType
+
+The generic item selector used by Mod Manager, DynOS Packs, Profiles, and Profile Detail is built on two types from `src/ui/common.rs`:
+
+```rust
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ItemType {
+    Toggle,  // checkmark (✓) or dash (—) icon; Enter/Space toggles enabled
+    Text,    // shows a label and its current value; Enter opens the virtual keyboard
+    Action,  // special synthetic item (e.g. "+ New Profile"); triggers an action
+}
+
+#[derive(Debug, Clone)]
+pub struct UiItem {
+    pub name: String,      // display label
+    pub rel_path: String,  // filesystem key (mod filename, profile dir name, config key)
+    pub enabled: bool,     // toggle state
+    pub item_type: ItemType,
+    pub value: String,     // current value for Text items
+}
+```
+
+`draw_item_selector` renders a scrollable list of these items inside a panel body rectangle. It accepts pre-rendered SDL2 textures for both item names and the three icon variants (check `✓`, dash `—`, plus `+`) and performs zero allocations per frame.
+
+Scroll state is managed by `ensure_selection_visible(selected, scroll, visible_rows) -> usize`, which adjusts the scroll offset just enough to keep the selected row on screen (no over-scroll).
+
+<CardGroup cols={2}>
+  <Card title="Toggle items" icon="toggle-on">
+    Used for mods, DynOS packs, and most profile settings. The `enabled` flag drives the icon: `✓` when enabled, `—` when disabled. Pressing Enter or Space flips `enabled` and immediately calls the appropriate manager write function.
+  </Card>
+  <Card title="Text items" icon="pen-to-square">
+    Used for the Player Name field in Profile Detail. Displays the current `value` string next to the label. Pressing Enter opens the `VirtualKeyboard` with `value` pre-populated in the buffer.
+  </Card>
+</CardGroup>
+
+---
+
+## Download browser
+
+`DownloadBrowserState` in `src/ui/download_browser.rs` is the most complex UI component. It combines a real-time search bar, tag chip filters, an author dropdown with autocomplete, a paginated mod list, and a download progress overlay.
+
+### Focus modes
+
+```rust
+pub enum DlFocusMode {
+    ModList,     // Up/Down navigate the mod list
+    TagChips,    // Left/Right navigate the tag filter chips
+    AuthorInput, // Author dropdown / autocomplete
+}
+```
+
+Tab (or the gamepad Start button) cycles through the three focus modes. The active focus mode determines which element receives arrow-key input.
+
+### Key state fields
+
+```rust
+pub struct DownloadBrowserState {
+    pub db: Option<DbFile>,           // loaded mod database
+    pub index: Option<SearchIndex>,   // pre-built search index
+    pub sorted: Vec<usize>,           // default-sort order (by rating desc)
+    pub search_text: String,          // current search query
+    pub filtered: Option<Vec<usize>>, // filtered index into sorted, or None = show all
+    pub selected: usize,              // selected row within current page
+    pub scroll: usize,                // scroll offset within current page
+    pub page: usize,                  // current page (DL_PAGE_SIZE = 15 items/page)
+    pub active_tags: Vec<String>,     // active tag filter chips
+    pub active_author: Option<String>,// active author filter
+    pub focus_mode: DlFocusMode,
+    pub top_tags: Vec<(String, usize)>, // top-9 tags by frequency for chip display
+    // … author dropdown state, per-row texture cache
+}
+```
+
+The database and search index are loaded lazily on the first time the sub-screen is opened. Filtering is re-computed whenever the search text, active tags, or active author changes using `filter_mods_combined` from the download manager.
+
+### Download progress overlay
+
+While a download is in progress the browser renders a progress bar overlay on top of the mod list. The overlay reads `DownloadProgress` from the shared `Arc<Mutex<DownloadProgress>>` and displays bytes downloaded, percentage, and — after extraction — the number of mods extracted.

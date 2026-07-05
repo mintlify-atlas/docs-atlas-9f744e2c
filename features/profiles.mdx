@@ -1,0 +1,132 @@
+---
+title: "Manage player profiles and per-profile game options"
+sidebarTitle: "Profiles"
+description: "Profiles let multiple players share one installation with separate player names, game configs, and option sets. Each profile has its own sm64config.txt and profile.json."
+---
+
+Profiles allow multiple players — or one player with different play styles — to share a single SM64 Coop DX installation while keeping their settings completely separate. Each profile maintains its own player name, game configuration, enabled mods, DynOS packs, and launch options. Switching profiles takes effect immediately the next time you launch the game.
+
+## Why Use Profiles?
+
+A profile captures everything that personalises a game session:
+
+- **Player name** shown to other players in multiplayer
+- **Per-profile `sm64config.txt`** — mod selections, DynOS packs, and network settings isolated per profile
+- **Launch flags** — `skip_intro`, `fullscreen`, `headless`, `no_discord`, and others toggled independently
+- **Game binary override** — a profile can point to a different game binary via its `game_path` field
+- **Save data** — each profile directory contains a `saves/` subdirectory
+
+## Profile Directories
+
+Profiles are stored under:
+
+```
+~/.local/share/sm64coopdx/profiles/
+├── active.txt          ← name of the currently active profile
+├── Default/
+│   ├── profile.json
+│   ├── sm64config.txt
+│   └── saves/
+└── MyProfile/
+    ├── profile.json
+    ├── sm64config.txt
+    └── saves/
+```
+
+| Path | Purpose |
+|------|---------|
+| `profiles/active.txt` | Contains the name of the active profile (plain text, atomically written) |
+| `profiles/<name>/profile.json` | Stores launch options (player name, flags, optional `game_path`) |
+| `profiles/<name>/sm64config.txt` | Per-profile game config (mods, packs, network settings) |
+| `profiles/<name>/saves/` | Save data directory |
+
+## Default Profile
+
+A profile named **Default** is created automatically the first time the launcher runs. It cannot be deleted. If `active.txt` is missing or points to a profile directory that no longer exists, the launcher falls back to **Default** automatically.
+
+## Opening the Profiles Panel
+
+<Steps>
+  <Step title="Open the arc menu">
+    Press `Tab` from the main launcher screen to open the arc navigation menu.
+  </Step>
+  <Step title="Select Profiles">
+    Navigate to **Profiles** and confirm. The Profiles panel lists all existing profiles, with the active profile shown highlighted. A synthetic **+ New Profile** entry appears at the bottom of the list.
+  </Step>
+</Steps>
+
+## Profile Operations
+
+<Tabs>
+  <Tab title="Activate">
+    Navigate to a profile and press `Space` to make it the active profile. The active profile's `sm64config.txt` and `profile.json` are used the next time you launch the game.
+  </Tab>
+  <Tab title="Create">
+    Press `N` to open the name-entry prompt. Type a name and confirm. The new profile's directory is built atomically (in a `.tmp` staging directory, then renamed). The parent profile's `sm64config.txt` is copied into the new profile so you start with existing mod/pack/network settings.
+  </Tab>
+  <Tab title="Rename">
+    Select a profile and press `R` to open the rename prompt. If the renamed profile was the active one, `active.txt` is updated automatically to the new name.
+  </Tab>
+  <Tab title="Delete">
+    Select a profile and hold `Del` until the confirmation timer completes. The **Default** profile and the currently **active** profile cannot be deleted — you must activate a different profile first.
+  </Tab>
+  <Tab title="Configure">
+    Press `Enter` on a profile to open its **Profile Detail** screen, where you can toggle per-profile launch options.
+  </Tab>
+</Tabs>
+
+## Profile Detail Screen
+
+The Profile Detail screen exposes all per-profile launch options as toggleable items. Press `Enter` on **Player Name** to open the virtual keyboard and type a new name.
+
+| Option | Description | CLI flag produced |
+|--------|-------------|-------------------|
+| **Player Name** | Display name shown in multiplayer sessions | `--playername <name>` |
+| **Skip Intro** | Skip the intro cutscene on startup | `--skip-intro` |
+| **Discord Rich Presence** | Enable Discord integration (toggle is *inverted* — turning it **off** adds `--no-discord`) | `--no-discord` |
+| **Fullscreen** | Launch the game in fullscreen mode | `--fullscreen` |
+| **Windowed** | Launch in windowed mode | `--windowed` |
+| **Skip Update Check** | Disable the built-in update checker | `--skip-update-check` |
+| **Headless (Server)** | Run without a display window — useful for dedicated servers | `--headless` |
+
+<Note>
+  **Discord Rich Presence** uses an inverted toggle: the checkbox shows **on** when Discord is *enabled* (no flag sent) and **off** when Discord is *disabled* (`--no-discord` is added). This matches the expected "Discord is ON by default" user experience.
+</Note>
+
+## Per-Profile `sm64config.txt`
+
+When a profile's `sm64config.txt` contains actual content, the launcher passes `--configfile <path>` to the game so the profile's config takes precedence over any global config. If the file is empty (which can happen when a new profile is created from a parent with no config), `--configfile` is *not* passed, preventing the game from seeing a blank configuration.
+
+## Per-Profile Game Binary Path
+
+A profile's `profile.json` may include an optional `game_path` field to override which game binary is launched for that profile:
+
+```json
+{
+  "playername": "Speedrunner",
+  "game_path": "/home/user/sm64coopdx-dev-build/sm64coopdx",
+  "skip_intro": true,
+  "fullscreen": false,
+  "no_discord": false,
+  "skip_update_check": false,
+  "headless": false
+}
+```
+
+This makes it easy to maintain separate profiles for stable and development builds without changing the global launcher configuration.
+
+<Tip>
+  See [/reference/profile-json](/reference/profile-json) for the complete field reference, including all supported keys, their types, and default values.
+</Tip>
+
+## Keyboard Shortcuts Summary
+
+| Key | Action |
+|-----|--------|
+| `↑` / `↓` | Navigate the profile list |
+| `Space` | Activate the selected profile |
+| `Enter` | Open Profile Detail for the selected profile |
+| `N` | Create a new profile |
+| `R` | Rename the selected profile |
+| `Del` (hold) | Delete the selected profile (with confirmation) |
+| `Esc` | Close the panel or cancel an input prompt |

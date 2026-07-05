@@ -1,47 +1,180 @@
 ---
-title: "Quickstart"
-description: "Begin with a guide on the fastest path to a successful outcome"
+title: "Get started with SM64 Coop DX Launcher"
+sidebarTitle: "Quickstart"
+description: "Launch SM64 Coop Deluxe in under 5 minutes: build the launcher, place your ROM, and run. The launcher auto-detects the game binary and validates your setup."
 ---
 
-Describe how someone begins using your product. What is the first thing they need to do? Are there any prerequisites?
-
-A quickstart should take someone from zero to using your product. They'll get a quick win and a sense of what they can accomplish.
-
-## Prerequisites
-
-Before you begin, you must have:
-
-- Requirement one (for example, Node.js 18+, a free account, an API key)
-- Requirement two (for example, a compatible device, a compatible browser, a compatible operating system)
-
-## Get started
+This guide takes you from a fresh clone to an in-game session of SM64 Coop Deluxe. The only prerequisites are a working [installation of coopdx-rs](/installation) and a copy of the SM64 US ROM and the `sm64coopdx` game binary.
 
 <Steps>
-  <Step title="Install">
-    Describe how to install your product or sign up.
 
-    ```bash
-    npm install your-package
-    ```
-  </Step>
-  <Step title="Configure">
-    Describe any setup or configuration needed before first use.
+### Build the launcher
 
-    ```bash
-    your-cli init
-    ```
-  </Step>
-  <Step title="Run it">
-    Show the first thing a user does to see it working.
+```bash
+git clone https://github.com/retired64/sm64coopdx_launcher
+cd sm64coopdx_launcher
+cargo build --release
+```
 
-    ```bash
-    your-cli start
-    ```
-  </Step>
+The compiled binary is placed at `target/release/sm64coopdx-launcher`. You can run it from there or copy it anywhere on your `PATH`.
+
+### Place your SM64 US ROM
+
+The launcher validates your ROM by MD5 checksum (`20b854b239203baf6c961b850a4a51a2`) before every launch. Place the ROM file in one of these locations — the launcher scans them in order and uses the first valid file it finds:
+
+1. The same directory as the `sm64coopdx` game binary.
+2. `~/.local/share/sm64coopdx/` (the shared save/data directory).
+3. The path specified in `~/.config/sm64coopdx/launcher.toml` under `[game].rom_path`.
+4. Any `~/sm64coopdx_Linux-*/` release directory in your home folder.
+
+The launcher copies a validated ROM to `~/.local/share/sm64coopdx/baserom.us.z64` automatically on first launch, so subsequent runs are instant.
+
+<Warning>
+  Only the **Super Mario 64 (USA)** ROM with MD5 `20b854b239203baf6c961b850a4a51a2` is accepted. Other regions or patched versions will fail validation and the launcher will display a red error message instead of starting the game.
+</Warning>
+
+### Install launcher assets
+
+The launcher requires its sprites, sounds, music, and font to be present in `~/.local/share/sm64coopdx/assets/`.
+
+```bash
+mkdir -p ~/.local/share/sm64coopdx/assets
+cp -r assets/* ~/.local/share/sm64coopdx/assets/
+```
+
+### Run the launcher
+
+```bash
+./target/release/sm64coopdx-launcher
+```
+
+To point the launcher at a specific game binary without editing any config file, pass `--game-path`:
+
+```bash
+./target/release/sm64coopdx-launcher --game-path /path/to/sm64coopdx
+```
+
+Or set the `SM64COOPDX_PATH` environment variable for a session-scoped override (see [Game path resolution](#game-path-resolution) below):
+
+```bash
+export SM64COOPDX_PATH="/path/to/sm64coopdx"
+./target/release/sm64coopdx-launcher
+```
+
+### Press Enter to launch the game
+
+On the main screen, press **Enter** (or the gamepad A button) to start the launch sequence:
+
+1. The screen fades to black over 1.5 seconds.
+2. The launcher validates that `lang/English.ini` exists next to the game binary and that the save path is writable.
+3. A valid ROM is located, validated by MD5, and copied to `~/.local/share/sm64coopdx/baserom.us.z64` if not already present.
+4. The game process is spawned with a clean environment (see below), all active mod/network/profile flags, and the save path set to `~/.local/share/sm64coopdx/`.
+5. The launcher returns to the main screen and monitors the game process; when the game exits, background music resumes at normal volume.
+
+If anything fails (binary not found, ROM missing, language file absent, save path not writable), the launcher displays a descriptive red error message on-screen. Check `~/.local/share/sm64coopdx/game_stderr.log` for the game's own output.
+
 </Steps>
 
-<Tip>
-  Give people a way to get help. This could be a link to a support page, a chat with a customer support agent, or a forum for your product.
+## Game path resolution
 
-  Example: Need help? Reach out to us at [support@yourcompany.com](mailto:support@yourcompany.com).
+The launcher uses a strict five-tier priority system to locate the `sm64coopdx` binary. Each tier is tried in order; if the path doesn't point to an existing file, the next tier is tried automatically.
+
+| Priority | Source | Example |
+|---|---|---|
+| 1 (highest) | `--game-path` CLI flag | `./sm64coopdx-launcher --game-path /opt/sm64/sm64coopdx` |
+| 2 | `SM64COOPDX_PATH` env var | `export SM64COOPDX_PATH=/opt/sm64/sm64coopdx` |
+| 3 | Active profile → `profile.json` → `game_path` field | `~/.local/share/sm64coopdx/profiles/<name>/profile.json` |
+| 4 | `launcher.toml` → `[game].path` | `~/.config/sm64coopdx/launcher.toml` |
+| 5 (default) | Automatic directory search | Scans `./`, `../`, and `~/sm64coopdx_Linux-*/` |
+
+All resolved paths are canonicalized to absolute form (symlinks resolved) so that the game's working directory is set correctly at spawn time.
+
+### Quick override: environment variable
+
+The `SM64COOPDX_PATH` variable is the fastest way to point the launcher at a specific binary without touching any file:
+
+```bash
+export SM64COOPDX_PATH="$HOME/sm64coopdx_Linux-1.5.1-autoUpdater/sm64coopdx"
+./target/release/sm64coopdx-launcher
+```
+
+### Persistent configuration: `launcher.toml`
+
+For a permanent path configuration, create `~/.config/sm64coopdx/launcher.toml`:
+
+```toml
+[game]
+# Absolute path to the sm64coopdx game binary
+path = "/home/user/sm64coopdx_Linux-1.5.1-autoUpdater/sm64coopdx"
+
+# Optional: absolute path to the SM64 US ROM
+# If omitted, the launcher searches common locations automatically
+rom_path = "/home/user/sm64coopdx_Linux-1.5.1-autoUpdater/Super Mario 64 (USA).z64"
+```
+
+### Per-profile binary path
+
+Each profile's `~/.local/share/sm64coopdx/profiles/<name>/profile.json` can also specify a `game_path`. This allows different profiles to target different builds of the game (for example, a stable release and a development build):
+
+```json
+{
+  "playername": "MyName",
+  "game_path": "/home/user/sm64coopdx_dev/sm64coopdx",
+  "skip_intro": true,
+  "fullscreen": false,
+  "no_discord": false,
+  "skip_update_check": true,
+  "headless": false
+}
+```
+
+## Keyboard controls
+
+| Key | Action |
+|---|---|
+| **Enter** | Launch the game / confirm selection |
+| **Tab** | Toggle the side menu open/closed |
+| **Esc** | Go back / close sub-screen / exit (from main screen) |
+| **↑ / ↓** (or **W / S**) | Navigate menu items and lists |
+| **← / →** | Change network mode; navigate tag chips |
+| **F** | Toggle fullscreen / windowed mode |
+| **Space** | Activate selected item (e.g. set active profile) |
+| **N** | New profile (in Profile Manager) |
+| **R** | Rename selected profile (in Profile Manager) |
+| **Delete** (hold 1.5s) | Delete selected profile (in Profile Manager) |
+| **/** | Activate search (in Download Browser) |
+| **C** | Clear all filters (in Download Browser) |
+| **Page Up / Page Down** | Previous / next page (in Download Browser) |
+
+### Gamepad controls
+
+| Button | Action |
+|---|---|
+| **A (button 0)** | Confirm / launch |
+| **B (button 1)** | Cancel / back |
+| **X (button 2)** | Activate (set active profile) |
+| **L1 (button 4)** | Previous page |
+| **R1 (button 5)** | Next page |
+| **Start (button 7)** | Toggle menu (Tab equivalent) |
+| **D-Pad** | Navigate lists and menus |
+| **B (hold 5s)** | Exit the launcher |
+
+<Tip>
+  Holding the gamepad B button for five seconds — or the keyboard **K** key — triggers a graceful shutdown with a progress indicator. Release before five seconds to cancel.
 </Tip>
+
+## Troubleshooting
+
+| Symptom | Likely cause | Fix |
+|---|---|---|
+| "Game binary not found" on main screen | No binary at any of the 5 resolution tiers | Set `SM64COOPDX_PATH` or add `[game].path` to `launcher.toml` |
+| Red error: "Language file not found" | `lang/English.ini` missing next to the binary | Ensure the full SM64 Coop DX release archive is extracted with its `lang/` directory intact |
+| Red error: "No valid SM64 US ROM found" | ROM absent or wrong MD5 | Place `Super Mario 64 (USA).z64` (MD5: `20b854b239203baf6c961b850a4a51a2`) next to the game binary |
+| Game freezes at "Loading ROM Assets" | ROM not copied to save path | Check that `~/.local/share/sm64coopdx/` is writable by your user |
+| Launcher fails at splash screen | Assets missing | Re-run `cp -r assets/* ~/.local/share/sm64coopdx/assets/` |
+
+For detailed game-side errors, inspect the log written by the launcher:
+
+```bash
+cat ~/.local/share/sm64coopdx/game_stderr.log
+```

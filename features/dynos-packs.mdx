@@ -1,0 +1,99 @@
+---
+title: "Toggle DynOS resource packs in-launcher"
+sidebarTitle: "DynOS Packs"
+description: "DynOS packs are subdirectories under ~/.local/share/sm64coopdx/dynos/packs/. Enable or disable them from the launcher's DynOS Packs panel without touching config files."
+---
+
+DynOS (Dynamic Object System) packs are resource bundles that replace or augment the game's built-in assets at runtime. Common uses include character model replacements and texture packs. The launcher's DynOS Packs panel lets you enable or disable any installed pack before launching the game, writing changes to `sm64config.txt` automatically.
+
+## What Are DynOS Packs?
+
+DynOS packs extend the game's visuals and gameplay without modifying the base executable:
+
+- **Character model replacements** — swap Mario for a custom character mesh and animations.
+- **Texture packs** — replace environmental textures, UI elements, or object skins.
+- **Asset mods** — any other resource bundle the DynOS subsystem supports.
+
+The game reads enabled packs from `sm64config.txt` at startup and loads them from the `dynos/packs/` directory.
+
+## Pack Directory
+
+All DynOS packs live under:
+
+```
+~/.local/share/sm64coopdx/dynos/packs/
+```
+
+Each **immediate subdirectory** inside `packs/` is treated as one pack. Plain files and nested directories without a valid pack structure are silently ignored. The launcher creates the `dynos/packs/` directory automatically on first run if it does not already exist.
+
+## Opening the DynOS Packs Panel
+
+<Steps>
+  <Step title="Open the arc menu">
+    Press `Tab` from the main launcher screen to open the arc navigation menu.
+  </Step>
+  <Step title="Select DynOS Packs">
+    Navigate to **DynOS Packs** and confirm. The panel opens with an alphabetically sorted list of every detected pack.
+  </Step>
+</Steps>
+
+## Toggling Packs On and Off
+
+Use the keyboard to navigate and toggle packs:
+
+| Key | Action |
+|-----|--------|
+| `↑` / `↓` | Move selection up or down |
+| `Enter` or `Space` | Toggle the selected pack on (✓) or off (—) |
+| `Esc` | Close the DynOS Packs panel |
+
+When you toggle a pack, the launcher immediately rewrites the `dynos-pack:` section of the active profile's `sm64config.txt`. All other config lines (mod enables, network settings, etc.) are preserved exactly.
+
+## How Enabled Packs Are Stored
+
+Enabled packs are recorded as `dynos-pack: <name>` lines in `sm64config.txt`, where `<name>` is the subdirectory name inside `dynos/packs/`:
+
+```text
+dynos-pack: MarioModelPack
+dynos-pack: HD_Textures
+```
+
+The write is atomic — the launcher writes to a `.tmp` file first, then renames it over the target, so the config file is never partially written.
+
+<Note>
+  You can enable multiple packs simultaneously. The game loads them in the order they appear in `sm64config.txt`. If two packs replace the same asset, the last one loaded wins.
+</Note>
+
+## Installing a New Pack
+
+<Steps>
+  <Step title="Locate the packs directory">
+    Open a terminal or file manager and navigate to `~/.local/share/sm64coopdx/dynos/packs/`.
+  </Step>
+  <Step title="Copy the pack directory">
+    Copy the pack's root directory (not its contents) into `packs/`. After the copy, the structure should look like:
+
+    ```
+    ~/.local/share/sm64coopdx/dynos/packs/
+    └── MyNewPack/
+        ├── mario/
+        │   └── ...
+        └── ...
+    ```
+  </Step>
+  <Step title="Refresh the DynOS Packs panel">
+    Close and reopen the DynOS Packs panel. The new pack appears in the list and is ready to be toggled on.
+  </Step>
+</Steps>
+
+<Warning>
+  The pack must be a directory — the launcher only scans immediate subdirectories of `dynos/packs/`. Loose files placed directly in the `packs/` folder are ignored.
+</Warning>
+
+## Keyboard Shortcuts Summary
+
+| Key | Action |
+|-----|--------|
+| `↑` / `↓` | Navigate the pack list |
+| `Enter` / `Space` | Toggle selected pack on/off |
+| `Esc` | Close the DynOS Packs panel |

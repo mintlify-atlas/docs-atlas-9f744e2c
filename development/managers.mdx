@@ -1,0 +1,353 @@
+---
+title: "Manager modules: mod, dynos, profile, network, download"
+sidebarTitle: "Managers"
+description: "Reference for the five manager modules in coopdx-rs. Each manager handles one domain: mod scanning, DynOS packs, player profiles, network config, and the download database."
+---
+
+The coopdx-rs launcher splits its data-layer concerns into five focused manager modules that live under `src/managers/`. Each module owns one domain — mod scanning, DynOS packs, player profiles, network settings, and the online download database — and exposes a clean set of public functions that the main event loop calls. All config writes use an atomic write-then-rename pattern (`*.tmp` → final) so that a crash or power loss never leaves a half-written file on disk.
+
+---
+
+## Mod Manager
+
+**Source files:** `src/managers/mod_manager.rs`, `src/managers/mod.rs`
+
+The mod manager discovers Lua mods on disk and serialises the enabled set into `sm64config.txt`. It is the only module authorised to write `enable-mod:` lines.
+
+### Scanning
+
+```rust
+pub fn scan_mods(mods_dir: &Path) -> Result<Vec<UiItem>, String>
+```
+
+Walks `mods_dir` and returns one `UiItem` per discovered mod, sorted alphabetically by name. Two shapes are recognised:
+
+- **Single-file mods** — any `.lua` file becomes a mod whose `name` is the file stem (e.g. `star_road.lua` → `name = "star_road"`, `rel_path = "star_road.lua"`).
+- **Folder mods** — any subdirectory that contains a `main.lua` file (e.g. `super_mod/main.lua` → `name = "super_mod"`, `rel_path = "super_mod"`).
+
+Anything else (empty directories, non-Lua files, directories without `main.lua`) is silently skipped. If `mods_dir` does not yet exist it is created and an empty list is returned.
+
+### Reading and writing the enabled set
+
+```rust
+pub fn parse_enabled_mods(config_path: &Path) -> Result<HashSet<String>, String>
+```
+
+Reads `sm64config.txt` and returns the set of names that appear on `enable-mod:` lines. Returns an empty set if the file does not exist. Both `enable-mod: name` (with space) and legacy `enable-mod:name` (without space) are accepted. Empty values are ignored.
+
+```rust
+pub fn write_enabled_mods(config_path: &Path, names: &[String]) -> Result<(), String>
+```
+
+Rewrites the `enable-mod:` section atomically. All non-`enable-mod:` lines (network settings, DynOS packs, etc.) are preserved in their original order. The new `enable-mod:` lines are appended after the preserved block.
+
+<Note>
+The write is atomic: the function writes to a sibling `.tmp` file and then calls `fs::rename` to swap it into place. On POSIX systems this is a single atomic syscall, so the config is never partially written.
+</Note>
+
+### Helper: applying the enabled set to a scanned item list
+
+```rust
+pub fn apply_enabled_state(items: &mut [UiItem], enabled: &HashSet<String>)
+```
+
+Iterates over a previously-scanned `Vec<UiItem>` and sets each item's `enabled` flag based on whether `item.name` or `item.rel_path` appears in `enabled`. Call this immediately after `scan_mods` + `parse_enabled_mods` to get a fully-populated item list for the UI.
+
+---
+
+## DynOS Manager
+
+**Source file:** `src/managers/dynos_manager.rs`
+
+DynOS packs are character and texture replacement packs loaded by the game's DynOS system. The DynOS manager mirrors the mod manager's API but targets `dynos-pack:` config lines and treats every *directory* inside `dynos/packs/` as a valid pack (no `main.lua` requirement).
+
+### Scanning
+
+```rust
+pub fn scan_packs(packs_dir: &Path) -> Result<Vec<UiItem>, String>
+```
+
+Reads `packs_dir` and returns one `UiItem` per immediate subdirectory, sorted alphabetically. Plain files in the directory are ignored. Missing directories are created on first call.
+
+### Reading and writing the enabled set
+
+```rust
+pub fn parse_enabled_packs(config_path: &Path) -> Result<HashSet<String>, String>
+```
+
+Reads `dynos-pack:` lines from `sm64config.txt`. Semantics are identical to `parse_enabled_mods`: missing files return an empty set, and both `dynos-pack: name` and `dynos-pack:name` are accepted.
+
+```rust
+pub fn write_enabled_packs(config_path: &Path, names: &[String]) -> Result<(), String>
+```
+
+Rewrites `dynos-pack:` lines atomically, preserving all other config content exactly as with `write_enabled_mods`.
+
+<Tip>
+Both the mod manager and DynOS manager share the same `sm64config.txt` file. The atomic write guarantees that concurrent writes from different managers cannot corrupt the file — but the launcher always performs only one write at a time on the main thread.
+</Tip>
+
+---
+
+## Profile Manager
+
+**Source file:** `src/managers/profile_manager.rs`
+
+Profiles let players keep separate configurations (player name, window mode, Discord settings) for different play styles. Each profile is a subdirectory of `~/.local/share/sm64coopdx/profiles/` that contains a `profile.json`, an `sm64config.txt`, and a `saves/` subdirectory.
+
+### ProfileConfig struct
+
+```rust
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ProfileConfig {
+    pub playername: String,
+    pub skip_intro: bool,
+    pub no_discord: bool,
+    pub fullscreen: bool,
+    pub windowed: bool,
+    pub skip_update_check: bool,
+    pub headless: bool,
+    pub created: Option<String>,   // ISO-8601 timestamp
+    pub game_path: Option<String>, // per-profile binary override
+}
+```
+
+All boolean fields default to `false` via `#[serde(default)]` so that older `profile.json` files without those keys deserialise correctly.
+
+<Warning>
+The `no_discord` field is **inverted** in the UI. When the "Discord Rich Presence" toggle is checked (enabled = `true`), `no_discord` is `false`. `build_profile_detail_items` handles this inversion automatically — you should never need to flip the value yourself.
+</Warning>
+
+### Initialisation and scanning
+
+```rust
+pub fn ensure_default_profile(profiles_dir: &Path) -> Result<(), String>
+```
+
+Creates the `Default` profile directory (including `saves/`) and writes the initial `profile.json` if neither exists. Also creates `active.txt` pointing to `Default` if that file is absent. Safe to call on every launch.
+
+```rust
+pub fn scan_profiles(profiles_dir: &Path, active_name: &str) -> Result<Vec<UiItem>, String>
+```
+
+Returns one `UiItem` per profile directory, alphabetically sorted with `Default` always first. The `enabled` field is set to `true` for the active profile. A synthetic `"+ New Profile"` item (with `rel_path = "__new__"`, `item_type = ItemType::Action`) is appended as the final entry.
+
+### Active profile tracking
+
+```rust
+pub fn get_active_profile_name(profiles_dir: &Path) -> Option<String>
+```
+
+Reads the profile name from `active.txt`. Returns `None` if the file is missing or empty.
+
+```rust
+pub fn set_active_profile(profiles_dir: &Path, name: &str) -> Result<(), String>
+```
+
+Atomically writes the profile name to `active.txt` (via `.active.tmp` → rename).
+
+### Profile CRUD
+
+```rust
+pub fn create_profile(
+    profiles_dir: &Path,
+    name: &str,
+    parent_cfg: &Path,
+) -> Result<(), String>
+```
+
+Creates a new profile directory atomically (builds in `.{name}.tmp`, then renames). Copies the caller-supplied `parent_cfg` (`sm64config.txt`) if it exists and is non-empty. Rejects empty names, unsafe filesystem characters, and case-insensitive duplicates.
+
+```rust
+pub fn rename_profile(
+    profiles_dir: &Path,
+    old_name: &str,
+    new_name: &str,
+) -> Result<(), String>
+```
+
+Renames the profile directory and automatically updates `active.txt` if the renamed profile was active.
+
+```rust
+pub fn load_profile_config(profile_dir: &Path) -> Result<ProfileConfig, String>
+pub fn save_profile_config(profile_dir: &Path, config: &ProfileConfig) -> Result<(), String>
+```
+
+JSON round-trip for `ProfileConfig`. `save_profile_config` writes atomically via `.tmp` → rename.
+
+### Building UI items and CLI args
+
+```rust
+pub fn build_profile_detail_items(config: &ProfileConfig) -> Vec<UiItem>
+```
+
+Returns the fixed 7-item list for the Profile Detail sub-screen in this order: Player Name (Text), Skip Intro (Toggle), Discord Rich Presence (Toggle, inverted), Fullscreen (Toggle), Windowed (Toggle), Skip Update Check (Toggle), Headless — Server (Toggle).
+
+```rust
+pub fn build_profile_args(
+    config: &ProfileConfig,
+    profile_dir: &Path,
+    data_dir: &Path,
+) -> Vec<String>
+```
+
+Converts a `ProfileConfig` into a CLI argument slice ready to be passed to the game binary. Always emits `--savepath <data_dir>`. Emits `--configfile <profile_dir>/sm64config.txt` only when that file is non-empty — an empty config file would override the game's own settings and break ROM path resolution.
+
+---
+
+## Network Manager
+
+**Source file:** `src/managers/network_manager.rs`
+
+The network manager handles reading and writing the network-related keys in `sm64config.txt` and provides the `NetworkMode` enum that drives the network form UI.
+
+### NetworkMode enum
+
+```rust
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NetworkMode {
+    Local,
+    Client,
+    Server,
+    CoopNet,
+}
+```
+
+The modes cycle in order `Local → Client → Server → CoopNet → Local`. Navigation methods:
+
+| Method | Description |
+|--------|-------------|
+| `next(self) -> NetworkMode` | Advance to next mode |
+| `prev(self) -> NetworkMode` | Go to previous mode |
+| `label(self) -> &'static str` | Human-readable label (`"Local"`, `"Client"`, etc.) |
+| `to_i32(self) -> i32` | Serialises to `coop_network_system` value |
+| `from_i32(v: i32) -> NetworkMode` | Deserialises from config file value |
+
+### NetworkConfig struct
+
+```rust
+#[derive(Debug, Clone)]
+pub struct NetworkConfig {
+    pub player_name: String,
+    pub mode: NetworkMode,
+    pub join_ip: String,
+    pub join_port: u16,       // default 7777
+    pub host_port: u16,       // default 7777
+    pub max_players: u16,     // default 16
+    pub coopnet_password: String,
+}
+```
+
+Defaults: `mode = Local`, `join_port = 7777`, `host_port = 7777`, `max_players = 16`.
+
+### Reading and writing
+
+```rust
+pub fn read_network_config(config_path: &Path) -> NetworkConfig
+```
+
+Parses the network keys (`coop_player_name`, `coop_join_ip`, `coop_join_port`, `coop_host_port`, `amount_of_players`, `coop_network_system`, `coopnet_password`) from `sm64config.txt`. Returns defaults if the file is missing.
+
+```rust
+pub fn write_network_config(
+    config_path: &Path,
+    config: &NetworkConfig,
+) -> Result<(), String>
+```
+
+Atomically rewrites the network key block while preserving all other lines (mod enables, DynOS packs, etc.) in their original order.
+
+<Note>
+In the source the parsing function is named `parse_network_config` rather than `read_network_config`. The internal name is an implementation detail; the public contract is a fallible parse that returns defaults on a missing file.
+</Note>
+
+---
+
+## Download Manager
+
+**Source file:** `src/managers/download_manager.rs`
+
+The download manager provides the mod database data model, the search index, and the actual HTTP download and ZIP extraction pipeline used by the Download Mods sub-screen.
+
+### DbMod and DbFile structs
+
+```rust
+pub struct DbMod {
+    pub id: String,
+    pub url: String,
+    pub title: Option<String>,
+    pub version: Option<String>,
+    pub author: Option<String>,
+    pub description: Option<String>,
+    pub tags: Vec<String>,
+    pub is_featured: bool,
+    pub download_urls: Vec<String>,
+    pub downloads: u64,
+    pub rating: Option<f64>,
+    pub last_update: Option<String>,
+    pub updates: Vec<ModUpdate>,
+    // … additional metadata fields
+}
+
+pub struct DbFile {
+    pub generated_at: Option<String>,
+    pub total_mods: usize,
+    pub mods: HashMap<String, DbMod>,
+    pub failed_urls: Vec<String>,
+}
+```
+
+All optional fields use `#[serde(default)]` so that mods with partial data deserialise without errors.
+
+<Warning>
+Mods whose `download_urls` contain a `gamebanana.com` host are automatically excluded from the search index. GameBanana links point to HTML pages, not direct ZIP archives, and cannot be downloaded programmatically.
+</Warning>
+
+### DownloadProgress struct
+
+```rust
+pub struct DownloadProgress {
+    pub bytes: u64,
+    pub total: Option<u64>,
+    pub done: bool,
+    pub error: Option<String>,
+    pub extracted: u32,
+}
+```
+
+Shared between the download worker thread and the main render loop via `Arc<Mutex<DownloadProgress>>`. The worker thread updates `bytes` every ~128 KB to reduce mutex contention. `pct() -> u8` returns 0–100 for progress bar rendering.
+
+### Download and extraction
+
+```rust
+pub fn download_mod_file(
+    url: &str,
+    dest_dir: &Path,
+    filename_hint: &str,
+    progress: &Arc<Mutex<DownloadProgress>>,
+    cancel: &AtomicBool,
+) -> Result<PathBuf, String>
+```
+
+Streams the file to a `.{filename}.part` temporary file and atomically renames it on completion. Sets a 30-second connect timeout with no total timeout (large mods can take a while). Checks the `cancel` flag between each 64 KB chunk and deletes the `.part` file if cancelled.
+
+```rust
+pub fn extract_mod_zip(zip_path: &Path, dest_dir: &Path) -> Result<Vec<PathBuf>, String>
+```
+
+Intelligently extracts a downloaded ZIP into `dest_dir` (the mods folder). The algorithm:
+
+1. Scan all ZIP entries for files named `main.lua`. Each `main.lua`'s parent directory is a **mod root**.
+2. Extract all entries under each mod root into `dest_dir/{mod_root_name}/`.
+3. If no `main.lua` is found, fall back to extracting the ZIP flat into `dest_dir/`.
+4. Any entry whose resolved path escapes `dest_dir` (zip-slip attack) is silently skipped.
+
+Returns the list of extracted mod directory paths.
+
+### Search utilities
+
+```rust
+pub fn normalize(s: &str) -> String
+```
+
+Lowercases `s` and strips all non-alphanumeric characters. Used for fuzzy matching between installed folder names and database mod IDs/titles. Never use the output for display — it is for comparison only.

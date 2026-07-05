@@ -1,0 +1,137 @@
+---
+title: "Configure multiplayer network modes"
+sidebarTitle: "Network"
+description: "The Network panel configures Local, Client, Server, and CoopNet multiplayer modes. Settings are saved to sm64config.txt and passed as CLI flags when the game launches."
+---
+
+The Network panel lets you choose how the game connects to other players and configure the parameters for that connection. Settings are persisted to the active profile's `sm64config.txt` and translated into CLI flags every time you launch the game, so you never have to remember the right command-line arguments.
+
+## Opening the Network Panel
+
+<Steps>
+  <Step title="Open the arc menu">
+    Press `Tab` from the main launcher screen to open the arc navigation menu.
+  </Step>
+  <Step title="Select Network">
+    Navigate to **Network** and confirm. The Network panel opens, showing the current mode selector and the fields relevant to that mode.
+  </Step>
+</Steps>
+
+## Network Modes
+
+The launcher supports four network modes, cycled with `←` / `→` on the mode selector:
+
+<Tabs>
+  <Tab title="Local">
+    **Local** mode starts the game without any network connection. No CLI network flag is added. Use this for single-player sessions or offline testing.
+
+    **Fields shown:** Player Name, Max Players
+
+    **CLI flags produced:** *(none)*
+  </Tab>
+  <Tab title="Client">
+    **Client** mode connects the game to an existing server. You must provide the server's IP address and port.
+
+    **Fields shown:** Join IP, Join Port, Player Name, Max Players
+
+    **CLI flags produced:**
+    ```bash
+    --client <ip> <port>
+    ```
+  </Tab>
+  <Tab title="Server">
+    **Server** mode hosts a multiplayer session that other players can join. The game listens on the port you specify.
+
+    **Fields shown:** Host Port, Player Name, Max Players
+
+    **CLI flags produced:**
+    ```bash
+    --server <port>
+    ```
+  </Tab>
+  <Tab title="CoopNet">
+    **CoopNet** mode uses the CoopNet matchmaking service, which handles NAT traversal and peer discovery. Players join by entering the same room password.
+
+    **Fields shown:** Password, Player Name, Max Players
+
+    **CLI flags produced:**
+    ```bash
+    --coopnet <password>
+    ```
+  </Tab>
+</Tabs>
+
+## Field Reference
+
+| Field | Config key in `sm64config.txt` | Default | Modes |
+|-------|-------------------------------|---------|-------|
+| Player Name | `coop_player_name` | *(empty)* | All |
+| Join IP | `coop_join_ip` | *(empty)* | Client |
+| Join Port | `coop_join_port` | `7777` | Client |
+| Host Port | `coop_host_port` | `7777` | Server |
+| Max Players | `amount_of_players` | `16` | All |
+| Password | `coopnet_password` | *(empty)* | CoopNet |
+| Network system | `coop_network_system` | `0` (Local) | All |
+
+<Note>
+  `coop_network_system` is a numeric value stored in `sm64config.txt`: `0` = Local/Client/Server (determined by CLI flags), `1` = CoopNet. The launcher writes the correct value automatically when you save settings.
+</Note>
+
+## Text Input and Virtual Keyboard
+
+Text fields (Join IP, Password, Player Name) open an on-screen virtual keyboard when you press `Enter` while they are focused. Type your value, then confirm to close the keyboard and apply the change. All text field edits are saved to `sm64config.txt` immediately after confirmation.
+
+## How Settings Are Saved
+
+When you update any network field, the launcher rewrites the network section of the active profile's `sm64config.txt` atomically. Non-network lines (mod enables, DynOS packs, etc.) are always preserved:
+
+```text
+coop_player_name StarPlayer
+coop_join_ip 192.168.1.42
+coop_join_port 7777
+coop_host_port 7777
+amount_of_players 8
+coop_network_system 0
+coopnet_password myroom
+```
+
+## CLI Flags Generated at Launch
+
+The launcher reads the saved config and appends the appropriate flags to the game's command line:
+
+<Tabs>
+  <Tab title="Client">
+    ```bash
+    sm64coopdx --client 192.168.1.42 7777 ...
+    ```
+  </Tab>
+  <Tab title="Server">
+    ```bash
+    sm64coopdx --server 7777 ...
+    ```
+  </Tab>
+  <Tab title="CoopNet">
+    ```bash
+    sm64coopdx --coopnet myroom ...
+    ```
+  </Tab>
+  <Tab title="Local">
+    ```bash
+    sm64coopdx ...
+    # (no network flag)
+    ```
+  </Tab>
+</Tabs>
+
+<Tip>
+  The **Player Name** set in the Network panel is a global default stored in `sm64config.txt`. If the active profile also has a **Player Name** configured in its Profile Detail screen, the profile name takes precedence — it is passed via `--playername` at launch time, overriding the config-file value.
+</Tip>
+
+## Keyboard Shortcuts Summary
+
+| Key | Action |
+|-----|--------|
+| `←` / `→` | Cycle through network modes |
+| `↑` / `↓` | Navigate between fields |
+| `Enter` | Edit the focused text field (opens virtual keyboard) |
+| `Esc` | Close the Network panel |

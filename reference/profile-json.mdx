@@ -1,0 +1,100 @@
+---
+title: "profile.json field reference for player profiles"
+sidebarTitle: "profile.json"
+description: "Reference for all fields in ~/.local/share/sm64coopdx/profiles/<name>/profile.json. Controls player name, game options, and per-profile binary path override."
+---
+
+Each player profile stores its settings in a `profile.json` file inside its profile directory. When you launch the game, the launcher reads the active profile's `profile.json` and translates its fields into command-line arguments passed to the `sm64coopdx` binary. All boolean fields default to `false` and may be omitted from the file entirely.
+
+## Fields
+
+<ParamField body="playername" type="string" required>
+  The in-game player display name. Passed to the game binary as `--playername <value>`. If empty, the `--playername` argument is omitted entirely and the game uses its own default.
+</ParamField>
+
+<ParamField body="skip_intro" type="boolean" default="false">
+  When `true`, passes `--skip-intro` to the game binary, bypassing the opening cutscene. Useful when iterating quickly or running a dedicated server.
+</ParamField>
+
+<ParamField body="no_discord" type="boolean" default="false">
+  When `true`, passes `--no-discord` to the game binary, disabling Discord Rich Presence integration. The launcher UI shows this as an inverted **Discord Rich Presence** toggle: the toggle appears *enabled* when `no_discord` is `false`, and *disabled* when `no_discord` is `true`.
+</ParamField>
+
+<ParamField body="fullscreen" type="boolean" default="false">
+  When `true`, passes `--fullscreen` to the game binary, starting the game in fullscreen mode.
+</ParamField>
+
+<ParamField body="windowed" type="boolean" default="false">
+  When `true`, passes `--windowed` to the game binary, forcing windowed mode even if the game config prefers fullscreen.
+</ParamField>
+
+<ParamField body="skip_update_check" type="boolean" default="false">
+  When `true`, passes `--skip-update-check` to the game binary, preventing the game from checking for updates on launch.
+</ParamField>
+
+<ParamField body="headless" type="boolean" default="false">
+  When `true`, passes `--headless` to the game binary. Use this for a dedicated server instance that runs without a graphical window.
+</ParamField>
+
+<ParamField body="created" type="string (ISO-8601)">
+  Optional. Timestamp recording when the profile was created, formatted as an ISO-8601 date-time string (e.g. `"2024-01-15T10:30:00Z"`). Written automatically by the launcher when a profile is created; never used as a game argument.
+</ParamField>
+
+<ParamField body="game_path" type="string">
+  Optional. Absolute path to the `sm64coopdx` binary for this profile. When set and the file exists, it takes priority over `launcher.toml → [game].path` but is overridden by the `SM64COOPDX_PATH` environment variable and the `--game-path` CLI argument. Set this to run different game versions from different profiles.
+
+  See [game binary resolution order](/reference/file-structure#game-files) for the full priority chain.
+</ParamField>
+
+## Game binary resolution order
+
+The launcher resolves the game binary path through the following tiers, falling through to the next level whenever a path does not point to an existing file:
+
+| Priority | Source |
+|----------|--------|
+| 1 (highest) | `--game-path` CLI argument |
+| 2 | `SM64COOPDX_PATH` environment variable |
+| 3 | `profile.json` → `game_path` (this field) |
+| 4 | `launcher.toml` → `[game].path` |
+| 5 (default) | Automatic search in common locations |
+
+## Example
+
+A complete `profile.json` with all fields shown. All boolean fields are optional and default to `false`; `created` and `game_path` are optional and can be set to `null` or omitted.
+
+```json
+{
+  "playername": "MyName",
+  "skip_intro": true,
+  "no_discord": false,
+  "fullscreen": false,
+  "windowed": false,
+  "skip_update_check": false,
+  "headless": false,
+  "created": "2024-01-15T10:30:00Z",
+  "game_path": null
+}
+```
+
+<Note>
+  The `profile.json` is serialized and deserialized with `serde_json`. Unknown fields are ignored on read, so adding custom annotations will not break the launcher.
+</Note>
+
+<Note>
+  Profile files are written atomically: the launcher first writes to a `.tmp` sibling file, then renames it over the target. This prevents corruption from an interrupted write.
+</Note>
+
+## Corresponding CLI arguments
+
+The following table shows exactly which CLI flag each boolean field produces when `true`:
+
+| Field | CLI argument emitted |
+|-------|---------------------|
+| `skip_intro` | `--skip-intro` |
+| `no_discord` | `--no-discord` |
+| `fullscreen` | `--fullscreen` |
+| `windowed` | `--windowed` |
+| `skip_update_check` | `--skip-update-check` |
+| `headless` | `--headless` |
+
+In addition, the launcher always passes `--savepath ~/.local/share/sm64coopdx/` and, when the profile's `sm64config.txt` is non-empty, `--configfile <profile-dir>/sm64config.txt`.

@@ -1,0 +1,206 @@
+---
+title: "SM64 Coop DX Launcher architecture overview"
+sidebarTitle: "Architecture"
+description: "High-level architecture of coopdx-rs: the SDL2 event loop, application state machine, manager modules, UI system, and concurrency model for audio and game process monitoring."
+---
+
+coopdx-rs is a single-binary SDL2 application written in Rust. The entire UI, audio playback, game launching, and mod management run in one process. Understanding the module layout, state machine, and concurrency model makes it straightforward to navigate the codebase and extend it safely.
+
+## Module structure
+
+The crate is organized into two layers: a set of logic modules at the top level, and two subdirectory module groups for managers and UI components.
+
+```
+src/
+├── main.rs          # SDL2 init, event loop, AppState machine
+├── config.rs        # Compile-time asset paths and UI constants
+├── game.rs          # Game path resolution, ROM validation, process spawn
+├── assets.rs        # FontCache — SDL2_ttf font lifecycle management
+├── error.rs         # LauncherResult<T> type alias
+├── managers/
+│   ├── mod_manager.rs
+│   ├── dynos_manager.rs
+│   ├── profile_manager.rs
+│   ├── network_manager.rs
+│   └── download_manager.rs
+└── ui/
+    ├── common.rs
+    ├── menu.rs
+    ├── panel.rs
+    ├── splash.rs
+    ├── vinyl.rs
+    ├── logo.rs
+    ├── keyboard.rs
+    ├── network_form.rs
+    └── download_browser.rs
+```
+
+### Top-level modules
+
+| Module | Responsibility |
+|---|---|
+| `main` | Initializes all SDL2 subsystems (video, audio, TTF, image, joystick), owns the event loop, drives the `AppState` machine, and holds all render state |
+| `config` | Declares compile-time `const` values (window size, font sizes, colour constants, ROM MD5) and `LazyLock<PathBuf>` statics that resolve XDG asset paths at first use |
+| `game` | Resolves the game binary path through a five-level priority chain, validates the SM64 US ROM by MD5, and spawns the game process with the correct arguments |
+| `assets` | Provides `FontCache`, which loads and caches SDL2\_ttf `Font` objects keyed by point size, avoiding repeated disk reads when the same font size is needed across frames |
+| `error` | Defines `LauncherResult<T> = Result<T, String>`, a lightweight error type used throughout to propagate SDL2 and I/O failures to `main` |
+
+### Manager modules
+
+The five managers in `managers/` each own one domain of persistent state. They read from and write to files under `~/.local/share/sm64coopdx/` and return plain Rust types — they never touch SDL2 or the renderer.
+
+| Module | Domain |
+|---|---|
+| `mod_manager` | Scans `mods/` for `.lua` files; reads and writes the enabled-mod list in `sm64config.txt` |
+| `dynos_manager` | Scans `dynos/packs/` for installed packs; reads and writes the enabled-pack list |
+| `profile_manager` | Creates, renames, deletes, and activates player profiles under `profiles/`; reads/writes `profile.json` |
+| `network_manager` | Reads and writes the network section of `sm64config.txt` (mode, server, CoopNet settings) |
+| `download_manager` | Downloads mod ZIP files over HTTP and extracts them into `data_dir/`; communicates progress via `Arc<Mutex<DownloadProgress>>` |
+
+### UI modules
+
+The nine modules in `ui/` are pure rendering and layout helpers. Each one takes mutable `Canvas` plus read-only state and produces SDL2 draw calls. None of them own persistent state or perform I/O.
+
+| Module | Renders |
+|---|---|
+| `common` | Shared item-list layout, hit-testing helpers, scroll helpers |
+| `menu` | Arc menu overlay (five items in a curved layout) |
+| `panel` | Sliding side panel — header, body, footer; `PanelState` tracks the slide animation |
+| `splash` | Loading screen with animated progress bar and fade transitions |
+| `vinyl` | Spinning vinyl disc and track info display |
+| `logo` | SM64 Coop DX logo render with drop shadow |
+| `keyboard` | On-screen virtual keyboard for text input (profiles, network config) |
+| `network_form` | Network configuration form fields and mode selector |
+| `download_browser` | Mod browser with tag chips, author filter, search, and paginated list |
+
+## Application state machine
+
+The entire application is driven by a single `AppState` enum. Each frame, the event loop reads `app_state` to determine which events are active, which UI layers to render, and which transitions to allow.
+
+```rust
+enum AppState {
+    Splash,
+    Game,
+    Menu,
+    SubScreen,
+    Launching,
+    ShuttingDown,
+}
+```
+
+<Steps>
+  <Step title="Splash">
+    The launcher starts here. Assets are loaded sequentially on the main thread across seven phases — nav sound, splash sound, vinyl texture, logo texture, icon surface, music track scan, and background texture. A progress bar driven by `PHASE_DELTAS` advances after each phase. When all phases complete and the minimum display time (`SPLASH_MIN_MS = 3000 ms`) has elapsed, the state transitions to **Game**.
+  </Step>
+  <Step title="Game">
+    The main screen. The background, spinning vinyl disc, logo, track info, and "By Retired64" creator button are rendered each frame. Pressing **Enter** or gamepad **A** transitions to **Launching**. Pressing **Tab** or gamepad **Start** transitions to **Menu**. Holding gamepad **B** (or keyboard **K**) for 5 seconds transitions to **ShuttingDown**.
+  </Step>
+  <Step title="Menu">
+    An arc menu overlay rendered on top of the Game screen. The menu lists five entries: Mod Manager, DynOS Packs, Profiles, Network, and Download Browser. Selecting an entry transitions to **SubScreen** and slides the corresponding panel in. Pressing **Tab**, **Escape**, or gamepad **B** returns to **Game**.
+  </Step>
+  <Step title="SubScreen">
+    A side panel covers part of the screen. The active `SubScreenType` (set in `PanelState`) determines what the panel renders: a toggleable item list (mods, DynOS packs), a profile list, a profile detail editor, a network form, or the download browser. Pressing **Escape** or gamepad **B** closes the panel and returns to **Game**.
+  </Step>
+  <Step title="Launching">
+    A fade-to-black overlay plays over `FADE_DURATION_MS` (500 ms). After the fade, `game::validate_launch` checks that `lang/English.ini` exists and the data directory is writable, then searches for a valid US SM64 ROM by MD5 hash and copies it to `~/.local/share/sm64coopdx/baserom.us.z64`. If validation passes, the game process is spawned. If it fails, an error message is rendered in red and the state returns to **Game**.
+  </Step>
+  <Step title="ShuttingDown">
+    A hold-to-exit progress bar appears. The progress is derived from the elapsed hold time: `(hold_ms / 5000) * 100%`. If the user releases the button, a reverse fade plays and the state returns to **Game**. If the full 5-second hold completes, the music is halted and the process exits.
+  </Step>
+</Steps>
+
+<Note>
+  Assets are loaded **sequentially on the main thread** during `Splash`, not in a background thread. Since there is no user interaction during the splash screen, the simpler in-line loading approach gives identical visual feedback (a progress bar) without requiring `Arc<Mutex<...>>` wrappers around SDL2 textures, which cannot be sent across threads.
+</Note>
+
+## Concurrency model
+
+The launcher intentionally keeps nearly all state on the main thread. Only three patterns involve non-main threads, and in every case the non-main thread is forbidden from mutating UI state directly.
+
+### Audio hook (SDL2\_mixer callback)
+
+`sdl2::mixer::Music::hook_finished` fires on the SDL2 audio thread when a music track ends. The callback must not touch any SDL2 render state. The solution is a single `AtomicBool`:
+
+```rust
+static TRACK_FINISHED: AtomicBool = AtomicBool::new(false);
+
+fn on_music_finished() {
+    TRACK_FINISHED.store(true, Ordering::Release);
+}
+```
+
+Each frame, the main loop checks `TRACK_FINISHED`. When it is `true`, the main loop performs the actual track advance — loading the next `.ogg` file and calling `music.play(0)` — then resets the flag. The audio thread never touches music or texture state.
+
+### Game process monitor
+
+After the game is spawned, a background thread calls `child.wait()` and sets a static `GAME_EXITED` `AtomicBool` when the process exits. The main loop polls this flag each frame and, when set, restores the music volume and updates the UI.
+
+```rust
+// Background monitor thread (spawned after game launch)
+std::thread::spawn(move || {
+    let _ = child.wait();
+    GAME_EXITED.store(true, Ordering::Release);
+});
+```
+
+### Download thread
+
+Mod downloads are handled by a `std::thread::spawn` closure that runs the blocking HTTP fetch and ZIP extraction. Progress and cancellation are the only shared state:
+
+```rust
+let progress: Arc<Mutex<DownloadProgress>> = Arc::new(Mutex::new(DownloadProgress::new(None)));
+let cancel: Arc<AtomicBool> = Arc::new(AtomicBool::new(false));
+```
+
+The download thread writes `progress` under a `Mutex` lock after each chunk. The main loop reads it each frame to update the progress bar. The cancel flag is set via `cancel.store(true, Ordering::Relaxed)` when the user presses **Escape**, causing the download thread to abort cleanly.
+
+<Warning>
+  No non-main thread may ever call SDL2 APIs or mutate UI state (textures, panel state, item lists) directly. All such mutations must happen on the main thread in response to an `AtomicBool` flag or data behind an `Arc<Mutex<...>>`. Violating this rule can cause SDL2 crashes or data races on the item list vectors.
+</Warning>
+
+## Gamepad support
+
+Gamepad input uses the SDL2 joystick subsystem (`sdl2::joystick`, not the higher-level `sdl2::controller`). Raw button indices and hat states are translated into logical actions by two **pure functions** with no SDL2 dependency:
+
+```rust
+fn joy_button_to_action(button: u8) -> GpAction {
+    match button {
+        0 => GpAction::Confirm,   // A button
+        1 => GpAction::Cancel,    // B button
+        2 => GpAction::Activate,  // X button
+        4 => GpAction::PagePrev,  // L1
+        5 => GpAction::PageNext,  // R1
+        7 => GpAction::Menu,      // Start
+        _ => GpAction::None,
+    }
+}
+
+fn hat_to_action(state: HatState) -> GpAction {
+    match state {
+        HatState::Up | HatState::RightUp | HatState::LeftUp   => GpAction::NavUp,
+        HatState::Down | HatState::RightDown | HatState::LeftDown => GpAction::NavDown,
+        HatState::Left  => GpAction::NavLeft,
+        HatState::Right => GpAction::NavRight,
+        _               => GpAction::None,
+    }
+}
+```
+
+The full set of logical actions is:
+
+| `GpAction` | Meaning |
+|---|---|
+| `Confirm` | Accept / select (A button, Enter key) |
+| `Cancel` | Back / close (B button, Escape key) |
+| `Activate` | Secondary action — activate profile (X button, Space key) |
+| `NavUp` | Navigate cursor up |
+| `NavDown` | Navigate cursor down |
+| `NavLeft` | Navigate cursor left / previous mode |
+| `NavRight` | Navigate cursor right / next mode |
+| `PagePrev` | Previous page in Download Browser (L1, PageUp) |
+| `PageNext` | Next page in Download Browser (R1, PageDown) |
+| `Menu` | Toggle arc menu (Start button, Tab key) |
+
+<Tip>
+  Because `joy_button_to_action` and `hat_to_action` are pure functions, they are fully covered by unit tests in the `gp_tests` module without requiring an SDL2 context. The keyboard debug keys (`J`, `K`, `L`, `U`, `O`, `I`) are mapped through the same `GpAction` dispatch path, so test coverage extends to the real event-loop behaviour.
+</Tip>

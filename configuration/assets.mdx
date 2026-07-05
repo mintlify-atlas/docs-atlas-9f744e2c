@@ -1,0 +1,168 @@
+---
+title: "Launcher assets: fonts, sounds, and sprites"
+sidebarTitle: "Assets"
+description: "The launcher loads SDL2 assets (font, splash image, vinyl disc, logo, sounds, music) from ~/.local/share/sm64coopdx/assets/. Copy the assets directory before first run."
+---
+
+The SM64 Coop DX Launcher is a full graphical application built on SDL2. Its user interface relies on a set of external asset files — fonts, images, sound effects, background music, and a mod database — that must be present on disk before the launcher starts. These files are intentionally shipped separately from the binary so they can be updated or replaced without recompiling the launcher. All assets are loaded from a single directory under your XDG data home.
+
+## Asset directory
+
+```
+~/.local/share/sm64coopdx/assets/
+```
+
+This path is derived at runtime from the XDG `data_dir` (typically `~/.local/share`) and is the only location the launcher searches. The directory must exist and be populated before the first run.
+
+## Installing assets
+
+Copy the `assets/` directory that ships alongside the launcher binary into the expected location:
+
+```bash
+mkdir -p ~/.local/share/sm64coopdx/assets
+cp -r assets/* ~/.local/share/sm64coopdx/assets/
+```
+
+Run this once after extracting the launcher archive. If you update the launcher to a new version, re-run the copy to pick up any new or changed asset files.
+
+<Note>
+  The source `assets/` directory referenced above is the one bundled with the launcher release — it lives next to the `sm64coopdx-launcher` binary in the downloaded archive.
+</Note>
+
+## Required asset files
+
+The table below lists every file the launcher loads from `~/.local/share/sm64coopdx/assets/`. All paths are relative to that base directory.
+
+| Asset path | Type | Purpose |
+|---|---|---|
+| `fonts/SuperMario256.ttf` | TrueType font | All in-launcher text rendering |
+| `splash.png` | PNG image | Full-screen splash graphic shown on startup |
+| `vinyl_disc.png` | PNG image | Animated spinning vinyl disc in the music player |
+| `sm64coopdx/logo.png` | PNG image | SM64 Coop DX logo displayed on the main screen |
+| `sm64coopdx/icon.png` | PNG image | Window icon (shown in taskbar / title bar) |
+| `background.png` | PNG image | Main background wallpaper |
+| `sounds/navigation_sound.wav` | WAV audio | Sound effect played when navigating menus |
+| `sounds/splash_sound.wav` | WAV audio | Sound effect played during the splash screen |
+| `ogg-sounds/` | Directory | Background music tracks (`.ogg` files) |
+| `database_sm64coopdx.json` | JSON | Mod download database (~1,100+ community mods) |
+
+<Warning>
+  If any required asset file is missing, the launcher will fail to load and log an error to stderr. The most common cause is forgetting to run the `cp -r assets/*` step after a fresh install or update.
+</Warning>
+
+## Asset details
+
+<Tabs>
+  <Tab title="Font">
+    The launcher uses a single font file, `fonts/SuperMario256.ttf`, for all rendered text. It is loaded at three sizes defined in the launcher configuration:
+
+    | Constant | Size | Use |
+    |---|---|---|
+    | `FONT_SIZE_DEFAULT` | 42 px | Main headings and menu items |
+    | `FONT_SIZE_MEDIUM` | 28 px | Sub-headings and descriptions |
+    | `FONT_SIZE_SMALL` | 18 px | Status text and small labels |
+
+    The font file must be present before the SDL2 TTF subsystem initialises; a missing font prevents the launcher from rendering any text at all.
+  </Tab>
+  <Tab title="Images">
+    All images are loaded as SDL2 textures via `SDL2_image`. The launcher expects standard PNG files at the exact paths listed in the table above.
+
+    - **`splash.png`** — displayed for at least 3 000 ms during the splash screen phase, with a 500 ms fade transition.
+    - **`vinyl_disc.png`** — rendered as an animated spinning disc in the music player widget; its rotation is updated each frame.
+    - **`sm64coopdx/logo.png`** — the game's logo, drawn prominently on the launcher's main screen.
+    - **`sm64coopdx/icon.png`** — passed to SDL2 as the window icon. It appears in your desktop taskbar and window title bar.
+    - **`background.png`** — the full-screen background wallpaper drawn behind all UI elements.
+  </Tab>
+  <Tab title="Sounds">
+    Sound effects are short WAV files loaded through `SDL2_mixer`:
+
+    - **`sounds/navigation_sound.wav`** — plays each time you move the selection cursor in a menu.
+    - **`sounds/splash_sound.wav`** — plays during the splash screen animation.
+
+    Both files must be present. A missing sound file prevents `SDL2_mixer` from loading the sound channel and logs an error.
+  </Tab>
+  <Tab title="Music">
+    Background music is stored as OGG Vorbis files in the `ogg-sounds/` subdirectory. The launcher:
+
+    1. Scans the directory for all `.ogg` files at startup.
+    2. Builds a playlist from every file found.
+    3. Selects a track at random and begins playback.
+    4. Automatically advances to the next random track when the current one finishes.
+
+    You can add, remove, or replace `.ogg` files in this directory to customise the music without recompiling anything. An empty `ogg-sounds/` directory is valid — the launcher will simply run silently. The directory itself must exist.
+  </Tab>
+  <Tab title="Mod database">
+    `database_sm64coopdx.json` is a JSON file that powers the launcher's built-in mod browser. It contains metadata for over 1 100 community mods scraped from GameBanana, including names, descriptions, download URLs, and checksums.
+
+    The launcher parses this file at startup to build its search index. If the file is missing, the mod browser will be empty but the rest of the launcher continues to function normally.
+
+    <Note>
+      Some entries in the database link to GameBanana mod pages rather than direct ZIP archives. These mods are marked `requires_manual_download` and excluded from the in-launcher one-click install flow. Visit the linked page to download them manually.
+    </Note>
+  </Tab>
+</Tabs>
+
+## Directory layout reference
+
+After a correct installation the asset tree should look like this:
+
+```
+~/.local/share/sm64coopdx/assets/
+├── fonts/
+│   └── SuperMario256.ttf
+├── sm64coopdx/
+│   ├── icon.png
+│   └── logo.png
+├── sounds/
+│   ├── navigation_sound.wav
+│   └── splash_sound.wav
+├── ogg-sounds/
+│   ├── track1.ogg
+│   └── track2.ogg          ← any number of .ogg files
+├── background.png
+├── database_sm64coopdx.json
+├── splash.png
+└── vinyl_disc.png
+```
+
+## Troubleshooting missing assets
+
+<Steps>
+  <Step title="Check the error message">
+    Run the launcher from a terminal to see stderr output:
+
+    ```bash
+    ./sm64coopdx-launcher
+    ```
+
+    Asset load errors are printed to stderr with the full path that was expected. This tells you exactly which file is missing.
+  </Step>
+  <Step title="Verify the assets directory exists">
+    ```bash
+    ls -la ~/.local/share/sm64coopdx/assets/
+    ```
+
+    If the directory does not exist, re-run the install step:
+
+    ```bash
+    mkdir -p ~/.local/share/sm64coopdx/assets
+    cp -r assets/* ~/.local/share/sm64coopdx/assets/
+    ```
+  </Step>
+  <Step title="Check individual files">
+    Cross-reference the directory listing against the required files table above. Pay attention to subdirectories — `fonts/`, `sounds/`, `sm64coopdx/`, and `ogg-sounds/` must all be present.
+
+    ```bash
+    find ~/.local/share/sm64coopdx/assets/ -type f | sort
+    ```
+  </Step>
+  <Step title="Re-copy from a clean archive">
+    If files appear corrupted or incomplete, extract a fresh copy of the launcher archive and re-run:
+
+    ```bash
+    cp -r assets/* ~/.local/share/sm64coopdx/assets/
+    ```
+
+    The copy is non-destructive for files not present in the source — existing files will be overwritten with the shipped versions.
+  </Step>
+</Steps>

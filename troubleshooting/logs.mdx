@@ -1,0 +1,154 @@
+---
+title: "Reading launcher and game logs for debugging"
+sidebarTitle: "Logs"
+description: "The launcher writes game stderr to game_stderr.log and its own logs to the terminal via env_logger. Learn how to enable debug logging and interpret common log messages."
+---
+
+The SM64 Coop DX Launcher produces two separate streams of diagnostic output: a log file that captures everything the game process writes to stderr, and the launcher's own structured log messages that are emitted to the terminal through the `env_logger` crate. Understanding both streams lets you pinpoint the exact point of failure — whether the problem is in the launcher's startup logic, the binary path resolution, or deep inside the game process itself.
+
+---
+
+## Game stderr log
+
+The launcher redirects the game process's standard error stream to a file on every launch. The file is created fresh each time the game is started, so previous output is always overwritten.
+
+**Log file location:**
+
+```
+~/.local/share/sm64coopdx/game_stderr.log
+```
+
+This path is constructed from the `GAME_STDERR_LOG` constant (`"game_stderr.log"`) joined to the launcher's data directory (`~/.local/share/sm64coopdx/`), as defined in `config.rs`. The launcher passes a `Stdio::from(stderr_file)` handle to the spawned `Command`, so all game-side errors — including OpenGL failures, audio device errors, Lua script panics, and ROM load failures — end up here.
+
+**Reading the log after a crash:**
+
+```bash
+cat ~/.local/share/sm64coopdx/game_stderr.log
+```
+
+**Following it live while the game is running:**
+
+```bash
+tail -f ~/.local/share/sm64coopdx/game_stderr.log
+```
+
+<Note>
+  The game's standard output (`stdout`) is discarded (`Stdio::null()`). Only stderr is captured. If a game-side feature prints diagnostics exclusively to stdout, those messages will not appear in the log file.
+</Note>
+
+<Tip>
+  Open a second terminal and run `tail -f` before pressing Enter in the launcher. This gives you a real-time view of game stderr from the moment the process spawns, which is especially useful for catching early initialization failures that happen before a window appears.
+</Tip>
+
+---
+
+## Launcher logs (env_logger)
+
+The launcher uses the Rust `log` crate with `env_logger` as the backend. By default, only `error` and `warn` messages are shown. Raising the log level reveals the full path-resolution chain and every decision the launcher makes before the game is spawned.
+
+**Enable debug-level logging:**
+
+```bash
+RUST_LOG=debug ./sm64coopdx-launcher
+```
+
+**Available log levels (least to most verbose):**
+
+| Level | When to use |
+|-------|-------------|
+| `error` | Default — only fatal issues |
+| `warn` | Includes fallback warnings (e.g. a configured path not found) |
+| `info` | Shows key milestones: path resolution, ROM discovery, spawn command |
+| `debug` | Full trace of every decision; recommended for bug reports |
+
+**Filter logs to the launcher only (suppress noisy dependencies):**
+
+```bash
+RUST_LOG=sm64coopdx_launcher=debug ./sm64coopdx-launcher
+```
+
+### Key log messages to look for
+
+The following messages appear at `info` level and above. They mark the most important steps in the launch sequence:
+
+| Log message | What it means |
+|-------------|---------------|
+| `Initializing SDL2 subsystems` | Launcher startup — SDL2 is being set up |
+| `Using game path from CLI: …` | Binary found via `--game-path` flag |
+| `Using game path from SM64COOPDX_PATH: …` | Binary found via environment variable |
+| `Using game path from profile override: …` | Binary found via active profile's `game_path` |
+| `Using game path from launcher.toml: …` | Binary found via `[game].path` in `launcher.toml` |
+| `Using default game path: …` | Binary found by automatic directory search |
+| `ROM found in game directory: …` | ROM discovered next to the game binary |
+| `ROM found in launcher data dir: …` | ROM discovered in `~/.local/share/sm64coopdx/` |
+| `ROM found via launcher.toml: …` | ROM found at `[game].rom_path` path |
+| `ROM already present and valid: …` | ROM copy skipped — destination already correct |
+| `ROM copied: … → …` | ROM was copied to the save directory |
+| `Spawning: … with N args, cwd=…` | The exact binary and argument list passed to `Command::new()` |
+| `Game process exited with status: …` | Game closed; exit code shown |
+
+At `warn` level, messages like `CLI --game-path points to non-existent file` and `launcher.toml [game].path points to non-existent file` tell you which resolution tier was tried and fell through.
+
+<Warning>
+  A `warn` about a path not found does **not** stop the launcher — it moves to the next tier. Only `error` messages indicate that the entire operation was aborted.
+</Warning>
+
+---
+
+## Checking the environment
+
+The launcher calls `Command::env_clear()` before spawning the game, then selectively restores a known-safe whitelist of environment variables via `build_game_env()`. This prevents environment pollution from Flatpak/AppImage wrappers, `LD_PRELOAD` hooks, and stale `PYTHONPATH` entries, but it also means the game process only sees what the whitelist explicitly passes through.
+
+### Display server variables
+
+If SDL2 cannot connect to a display server, the game will crash immediately with no window. Verify that the relevant variable is set in your current shell:
+
+```bash
+# X11
+echo $DISPLAY
+# Wayland
+echo $WAYLAND_DISPLAY
+```
+
+A typical X11 session has `DISPLAY=:0`. If either variable is empty, SDL2 has no display to connect to.
+
+**Full environment whitelist** passed to the game process (from `build_game_env()` in `game.rs`):
+
+| Variable | Purpose |
+|----------|---------|
+| `DISPLAY` | X11 display server connection |
+| `WAYLAND_DISPLAY` | Wayland compositor socket |
+| `XAUTHORITY` | X11 authentication cookie file |
+| `HOME` | User home directory |
+| `XDG_RUNTIME_DIR` | Runtime directory for sockets and pipes |
+| `XDG_DATA_HOME` | XDG user data directory override |
+| `XDG_CONFIG_HOME` | XDG user config directory override |
+| `XDG_CACHE_HOME` | XDG user cache directory override |
+| `XDG_DATA_DIRS` | XDG system data directory search path |
+| `PULSE_SERVER` | PulseAudio server address |
+| `PULSE_COOKIE` | PulseAudio authentication cookie |
+| `ALSA_CARD` | ALSA sound card override |
+| `DBUS_SESSION_BUS_ADDRESS` | D-Bus session bus address |
+| `LANG` | Locale language setting |
+| `LC_ALL` | Full locale override |
+| `LC_MESSAGES` | Message locale setting |
+| `PATH` | Executable search path |
+| `USER` | Current username |
+| `SHELL` | User's shell |
+| `TERM` | Terminal type |
+
+Any variable **not** on this list — including `LD_LIBRARY_PATH`, `LD_PRELOAD`, and `PYTHONPATH` — is stripped before the game starts.
+
+<Note>
+  If the game links against a library via `RPATH=$ORIGIN` (standard for self-contained release bundles), stripping `LD_LIBRARY_PATH` is safe. If your installation relies on `LD_LIBRARY_PATH` to find `libdiscord_game_sdk.so` or another bundled `.so`, the game may fail to load it. In that case, confirm the `.so` lives in the same directory as the binary so the runtime linker finds it via `$ORIGIN`.
+</Note>
+
+### Diagnosing a "no display" crash
+
+If the game exits immediately with a non-zero status and `game_stderr.log` contains an SDL2 display error, run the launcher with `RUST_LOG=debug` and check which `DISPLAY` / `WAYLAND_DISPLAY` value was picked up:
+
+```bash
+RUST_LOG=debug ./sm64coopdx-launcher 2>&1 | grep -E "DISPLAY|Spawning"
+```
+
+The `Spawning: …` line shows the exact binary and argument list. Cross-reference the log table above to confirm the display variable was present when the launcher started.

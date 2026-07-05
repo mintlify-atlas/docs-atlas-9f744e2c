@@ -1,0 +1,113 @@
+{
+  "projectType": "cli-tool",
+  "projectName": "SM64 Coop DX Launcher",
+  "projectDescription": "A lightweight SDL2-based graphical launcher for Super Mario 64: Coop Deluxe on Linux, written in Rust, with mod management, DynOS pack support, profile management, network configuration, and a built-in mod download browser.",
+  "theme": "aspen",
+  "primaryColor": "#7B3FE4",
+  "lightColor": "#C084FC",
+  "darkColor": "#14083C",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Configuration",
+            "pages": [
+              "configuration/launcher-toml",
+              "configuration/game-path-resolution",
+              "configuration/assets"
+            ]
+          },
+          {
+            "group": "Features",
+            "pages": [
+              "features/mod-manager",
+              "features/dynos-packs",
+              "features/profiles",
+              "features/network",
+              "features/download-browser"
+            ]
+          },
+          {
+            "group": "File Reference",
+            "pages": [
+              "reference/file-structure",
+              "reference/profile-json",
+              "reference/sm64config",
+              "reference/rom-requirements"
+            ]
+          },
+          {
+            "group": "Troubleshooting",
+            "pages": [
+              "troubleshooting/common-errors",
+              "troubleshooting/logs"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Development",
+        "groups": [
+          {
+            "group": "Building",
+            "pages": [
+              "development/building",
+              "development/architecture"
+            ]
+          },
+          {
+            "group": "Internals",
+            "pages": [
+              "development/managers",
+              "development/ui-system",
+              "development/game-launch-pipeline"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "5-tier game binary path resolution (CLI arg → env var → profile override → launcher.toml → auto-detect)",
+    "SDL2 graphical UI with splash screen, animated vinyl disc, and background music playback",
+    "Mod Manager: enable/disable Lua mods and folder-based mods stored in ~/.local/share/sm64coopdx/mods/",
+    "DynOS Packs Manager: toggle DynOS resource packs from ~/.local/share/sm64coopdx/dynos/packs/",
+    "Profile Manager: create, rename, delete, and activate named profiles each with independent game config",
+    "Network Configuration: Local, Client, Server, and CoopNet modes with per-profile settings",
+    "Built-in Download Browser: browse and install 1,000+ mods from the bundled database JSON",
+    "ROM validation via MD5 checksum (20b854b239203baf6c961b850a4a51a2) with automatic copy to savepath",
+    "Gamepad support with configurable button-to-action mapping and B-button hold-to-exit",
+    "Clean game environment spawning with env_clear() + whitelist to prevent library conflicts"
+  ],
+  "publicApiSurface": [
+    "--game-path <PATH>  (CLI flag to override game binary location)",
+    "SM64COOPDX_PATH     (environment variable for game binary path)",
+    "~/.config/sm64coopdx/launcher.toml  ([game].path and [game].rom_path)",
+    "~/.local/share/sm64coopdx/profiles/<name>/profile.json  (per-profile config)",
+    "~/.local/share/sm64coopdx/sm64config.txt  (shared game config: mods, network, dynos)",
+    "~/.local/share/sm64coopdx/mods/  (Lua mod files and directories)",
+    "~/.local/share/sm64coopdx/dynos/packs/  (DynOS resource pack directories)",
+    "~/.local/share/sm64coopdx/assets/  (launcher assets: fonts, sounds, sprites)",
+    "~/.local/share/sm64coopdx/game_stderr.log  (game process error log)",
+    "game::resolve_game_path(cli_arg, profile_override) -> PathBuf",
+    "game::spawn_game(binary, args, log_dir) -> Result<Child>",
+    "game::build_mod_args(enabled_names) -> Vec<String>",
+    "game::build_network_args(config) -> Vec<String>",
+    "game::build_all_game_args(mods, network, profile, profile_dir, data_dir) -> Vec<String>",
+    "managers::mod_manager::scan_mods(mods_dir) -> Result<Vec<UiItem>>",
+    "managers::dynos_manager::scan_packs(packs_dir) -> Result<Vec<UiItem>>",
+    "managers::profile_manager::ProfileConfig (playername, skip_intro, no_discord, fullscreen, headless, game_path, ...)",
+    "managers::network_manager::NetworkMode (Local | Client | Server | CoopNet)",
+    "managers::download_manager::DbMod (id, title, author, tags, download_urls, ...)"
+  ]
+}

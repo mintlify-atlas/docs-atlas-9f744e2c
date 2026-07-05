@@ -1,0 +1,146 @@
+---
+title: "How the launcher resolves the game binary path"
+sidebarTitle: "Path Resolution"
+description: "The launcher resolves the SM64 Coop DX binary through a 5-tier priority chain. Each level is validated; if the path doesn't exist the launcher falls through to the next tier."
+---
+
+Every time the launcher starts it must locate the `sm64coopdx` binary before it can launch the game. Rather than requiring explicit configuration, it works through a five-tier priority chain — from the most specific override (a CLI flag you pass directly) down to a broad automatic search of your home directory. The chain is sequential and fault-tolerant: if a configured path points to a file that does not exist, the launcher logs a warning and tries the next tier instead of failing immediately.
+
+## Priority chain overview
+
+| Priority | Source | Example |
+|---|---|---|
+| 1 (highest) | `--game-path` CLI flag | `./sm64coopdx-launcher --game-path /opt/sm64/sm64coopdx` |
+| 2 | `SM64COOPDX_PATH` environment variable | `export SM64COOPDX_PATH=/opt/sm64/sm64coopdx` |
+| 3 | Per-profile `game_path` in `profile.json` | `~/.local/share/sm64coopdx/profiles/MyProfile/profile.json` |
+| 4 | `launcher.toml` → `[game].path` | `~/.config/sm64coopdx/launcher.toml` |
+| 5 (lowest) | Auto-detection (four search paths) | Scans `../games/mario64/`, `./`, `../`, and `~/sm64coopdx_Linux-*/` |
+
+Each resolved path is **canonicalized** — converted to an absolute path with all symlinks resolved — before use. This prevents issues where a relative path combined with the launcher's `current_dir` logic could produce an incorrect double-prefix when spawning the game process.
+
+## Tier 1 — CLI flag `--game-path`
+
+Passing `--game-path <PATH>` on the command line is the highest-priority override. Use it for one-off launches or scripting without touching any stored configuration.
+
+```bash
+./sm64coopdx-launcher --game-path /home/user/sm64coopdx_Linux-1.5.1-autoUpdater/sm64coopdx
+```
+
+If the path you supply does not point to an existing file the launcher emits a warning and falls through to tier 2.
+
+## Tier 2 — Environment variable `SM64COOPDX_PATH`
+
+Set the `SM64COOPDX_PATH` variable in your shell environment. This is a good choice when you want a persistent override that applies every session without editing any config file.
+
+```bash
+# Temporary (current shell session only)
+export SM64COOPDX_PATH="/home/user/sm64coopdx_Linux-1.5.1-autoUpdater/sm64coopdx"
+./sm64coopdx-launcher
+
+# Permanent (add to ~/.bashrc or ~/.profile)
+echo 'export SM64COOPDX_PATH="/home/user/sm64coopdx_Linux-1.5.1-autoUpdater/sm64coopdx"' >> ~/.bashrc
+```
+
+If the variable is set but the file does not exist, the launcher warns and falls through to tier 3.
+
+## Tier 3 — Per-profile `game_path`
+
+Each player profile can embed its own binary path in `profile.json`, located at:
+
+```
+~/.local/share/sm64coopdx/profiles/<ProfileName>/profile.json
+```
+
+Add the optional `game_path` field alongside the other profile options:
+
+```json
+{
+  "playername": "MyPlayer",
+  "game_path": "/home/user/sm64coopdx-dev-build/sm64coopdx",
+  "skip_intro": true
+}
+```
+
+This lets different profiles point to different game versions — for example, a stable release for casual play and a development build for mod testing — without changing any global configuration. The per-profile path is checked **after** the environment variable but **before** `launcher.toml`, so it overrides the global config file while still losing to the environment.
+
+<Tip>
+  Profile-level binary overrides are the recommended way to maintain multiple game versions side-by-side. Create one profile per version and switch between them from the launcher's profile screen.
+</Tip>
+
+## Tier 4 — `launcher.toml`
+
+The `[game].path` field in `~/.config/sm64coopdx/launcher.toml` is the standard persistent configuration method when you do not need per-profile differences. See [Configure the launcher with launcher.toml](/configuration/launcher-toml) for full details.
+
+```toml
+[game]
+path = "/home/user/sm64coopdx_Linux-1.5.1-autoUpdater/sm64coopdx"
+```
+
+If the path is set but the file is missing, the launcher falls through to auto-detection.
+
+## Tier 5 — Auto-detection
+
+When no explicit path is found in tiers 1–4, the launcher searches four candidate locations in order. The first path that resolves to an existing file is used.
+
+<Steps>
+  <Step title="games/mario64/ subdirectory">
+    ```
+    <launcher_dir>/../games/mario64/sm64coopdx
+    ```
+    The canonical layout when using a bundled distribution where the launcher lives alongside a `games/` directory one level up.
+  </Step>
+  <Step title="Same directory as the launcher">
+    ```
+    <launcher_dir>/sm64coopdx
+    ```
+    Works when the game binary is extracted into the same folder as `sm64coopdx-launcher`.
+  </Step>
+  <Step title="Parent directory">
+    ```
+    <launcher_dir>/../sm64coopdx
+    ```
+    Handles the case where the launcher is in a subdirectory and the game binary is one level up.
+  </Step>
+  <Step title="Home directory glob">
+    ```
+    ~/sm64coopdx_Linux-*/sm64coopdx
+    ```
+    Scans every directory in your home folder whose name starts with `sm64coopdx_Linux-` and returns the first binary found. This matches the naming convention of the official release archives (e.g. `sm64coopdx_Linux-1.5.1-autoUpdater/`).
+  </Step>
+</Steps>
+
+<Note>
+  `<launcher_dir>` refers to the directory containing the `sm64coopdx-launcher` executable, determined at runtime via `std::env::current_exe()`. It is not the working directory from which you run the launcher.
+</Note>
+
+## Fall-through behavior
+
+Every tier follows the same validation rule: if the path string is present but does not point to an existing **file** on disk, it is skipped with a `WARN`-level log message and the next tier is tried. A non-existent path never causes an immediate error — the error only surfaces if all five tiers are exhausted without finding a valid file.
+
+```
+[WARN] CLI --game-path points to non-existent file: /bad/path/sm64coopdx
+[WARN] SM64COOPDX_PATH points to non-existent file: /also/bad/sm64coopdx
+[WARN] launcher.toml [game].path points to non-existent file: /still/missing
+[WARN] Default game path not found: <launcher>/../games/mario64/sm64coopdx
+```
+
+<Warning>
+  If no tier resolves to a valid binary, the launcher displays a **"Game binary not found"** error on the main screen and the Play button is disabled. Configure any of the tiers above to resolve this.
+</Warning>
+
+## Choosing the right tier
+
+<CardGroup cols={2}>
+  <Card title="One-off override" icon="terminal">
+    Use the `--game-path` CLI flag. No files are changed; the override only applies for that single launch.
+  </Card>
+  <Card title="Session-wide default" icon="circle-nodes">
+    Export `SM64COOPDX_PATH` in your shell profile. Takes effect in every new terminal session without editing config files.
+  </Card>
+  <Card title="Per-profile binary" icon="user">
+    Add `game_path` to the profile's `profile.json`. Best when you run multiple game versions under separate profiles.
+  </Card>
+  <Card title="Permanent global config" icon="file">
+    Set `[game].path` in `~/.config/sm64coopdx/launcher.toml`. The simplest persistent option for single-installation setups.
+  </Card>
+</CardGroup>

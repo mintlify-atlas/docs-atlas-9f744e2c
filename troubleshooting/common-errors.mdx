@@ -1,0 +1,269 @@
+---
+title: "Diagnose and fix common SM64 Coop DX Launcher errors"
+sidebarTitle: "Common Errors"
+description: "Solutions for the most common launcher errors: game binary not found, missing language file, no valid ROM, SDL2 initialization failures, and save path permission issues."
+---
+
+When something goes wrong, the launcher displays a red error message beneath the logo on the main screen. Most failures fall into one of five categories: the game binary cannot be found, a language file is missing from the installation, no valid ROM was located, SDL2 cannot initialize, or the save directory is not writable. The quick-reference table below maps each error to its root cause and the fastest fix, followed by detailed accordion sections for each category.
+
+## Quick reference
+
+| Error | Cause | Solution |
+|-------|-------|----------|
+| Game binary not found | Binary path unresolved through all 5 tiers | Set `SM64COOPDX_PATH` or configure `launcher.toml` |
+| Language file not found | Incomplete game installation | Re-extract the full game archive |
+| No valid SM64 US ROM found | ROM absent or wrong MD5 hash | Place `baserom.us.z64` in the game directory |
+| Savepath not writable | Insufficient file permissions | `chmod -R u+rw ~/.local/share/sm64coopdx/` |
+
+---
+
+## Game binary errors
+
+<Accordion title='"Game binary not found" — binary path resolution failed'>
+
+The launcher resolves the `sm64coopdx` binary through five tiers in order. If a tier points to a non-existent file the launcher falls through to the next one automatically. When every tier is exhausted and no file is found, `spawn_game` returns this error.
+
+**Resolution tiers (highest to lowest priority)**
+
+1. `--game-path` CLI argument
+2. `SM64COOPDX_PATH` environment variable
+3. Per-profile `game_path` field in `profile.json`
+4. `launcher.toml` → `[game].path`
+5. Automatic search: `<launcher_dir>/../games/mario64/sm64coopdx`, then `./sm64coopdx`, `../sm64coopdx`, and finally any `~/sm64coopdx_Linux-*/sm64coopdx` directory
+
+**Step-by-step fixes**
+
+<Steps>
+  <Step title="Check whether the binary exists">
+    Locate your extracted SM64 Coop DX release folder and confirm the binary is present:
+
+    ```bash
+    ls -l ~/sm64coopdx_Linux-*/sm64coopdx
+    ```
+  </Step>
+  <Step title="Set the environment variable (quick fix)">
+    Export `SM64COOPDX_PATH` before launching:
+
+    ```bash
+    export SM64COOPDX_PATH="/home/$USER/sm64coopdx_Linux-1.5.1/sm64coopdx"
+    ./sm64coopdx-launcher
+    ```
+  </Step>
+  <Step title="Use the --game-path flag">
+    Pass the path directly on the command line for a one-off launch:
+
+    ```bash
+    ./sm64coopdx-launcher --game-path /path/to/sm64coopdx
+    ```
+  </Step>
+  <Step title="Configure launcher.toml (persistent fix)">
+    Create or edit `~/.config/sm64coopdx/launcher.toml`:
+
+    ```toml
+    [game]
+    path = "/home/YOUR_USER/sm64coopdx_Linux-1.5.1/sm64coopdx"
+    ```
+  </Step>
+  <Step title="Verify execute permissions">
+    If the binary exists but cannot be spawned, it may not be marked executable:
+
+    ```bash
+    chmod +x /path/to/sm64coopdx
+    ```
+
+    The launcher also attempts to set `0o755` automatically on Unix, but doing it manually guarantees the fix.
+  </Step>
+</Steps>
+
+<Note>
+  All resolved paths are canonicalized to an absolute form (symlinks resolved) before the game is spawned. If your binary lives behind a symlink, the launcher follows it correctly.
+</Note>
+
+</Accordion>
+
+---
+
+## ROM errors
+
+<Accordion title='"No valid SM64 US ROM found" — ROM absent or wrong MD5'>
+
+Before launching the game, the launcher searches for a `.z64` file whose MD5 hash exactly matches the Super Mario 64 US ROM. If no matching file is found across all search locations the launch is aborted.
+
+**Expected MD5:** `20b854b239203baf6c961b850a4a51a2`
+
+**Search order**
+
+1. The game binary's directory
+2. `~/.local/share/sm64coopdx/`
+3. `[game].rom_path` in `launcher.toml`
+4. Any `~/sm64coopdx_Linux-*/` directory in your home folder
+
+**Fixes**
+
+Place your ROM in the game directory and verify its hash:
+
+```bash
+md5sum "Super Mario 64 (USA).z64"
+# Expected: 20b854b239203baf6c961b850a4a51a2
+```
+
+If the hash does not match, your ROM dump is not the supported US v1.0 revision. Only this specific revision is accepted.
+
+To point the launcher to a ROM in a non-standard location, add a `rom_path` entry to `~/.config/sm64coopdx/launcher.toml`:
+
+```toml
+[game]
+rom_path = "/path/to/Super Mario 64 (USA).z64"
+```
+
+Once the launcher finds a valid ROM, it copies it to `~/.local/share/sm64coopdx/baserom.us.z64` and reuses that copy on subsequent launches (skipping the copy step if the file is already present and valid).
+
+<Warning>
+  Do not rename the ROM to `baserom.us.z64` yourself and place it in the save directory while the launcher is running — the launcher validates it by MD5, not filename, so a corrupt or wrong-region file with the right name will still be rejected.
+</Warning>
+
+</Accordion>
+
+<Accordion title="Game freezes on &quot;Loading ROM Assets&quot;">
+
+This screen appears when the game process starts but cannot read the ROM from the save directory. The most common cause is that the ROM copy step succeeded but the resulting file at `~/.local/share/sm64coopdx/baserom.us.z64` is not readable by the game process.
+
+**Check write and read permissions on the save directory:**
+
+```bash
+ls -la ~/.local/share/sm64coopdx/baserom.us.z64
+```
+
+If the file is owned by root or has no read permission for your user, fix it:
+
+```bash
+chmod u+rw ~/.local/share/sm64coopdx/baserom.us.z64
+```
+
+If the directory itself is not writable the launcher will fail before this point, but a partial copy due to a previous interrupted launch can also cause this freeze. Delete the partial file and re-launch to trigger a fresh copy:
+
+```bash
+rm ~/.local/share/sm64coopdx/baserom.us.z64
+```
+
+</Accordion>
+
+---
+
+## Language and installation errors
+
+<Accordion title='"Language file not found" — incomplete game installation'>
+
+After resolving the game binary path, the launcher calls `validate_game_installation()`, which checks that `{game_dir}/lang/English.ini` exists next to the binary. If this file is missing the launch is blocked with this error.
+
+**Cause:** The game release archive was not fully extracted, or only the binary was copied without its supporting files.
+
+**Fix:**
+
+Re-extract the complete SM64 Coop DX release archive into a single directory:
+
+```bash
+tar -xf sm64coopdx_Linux-*.tar.gz -C ~/
+# or for zip releases:
+unzip sm64coopdx_Linux-*.zip -d ~/
+```
+
+Verify the directory structure after extraction:
+
+```bash
+ls ~/sm64coopdx_Linux-*/lang/English.ini
+```
+
+The `lang/` folder must be a sibling of the `sm64coopdx` binary. Moving the binary to another location without moving the `lang/` folder alongside it will reproduce this error.
+
+<Tip>
+  The launcher also checks for a `dynos/` directory at the same level. While its absence only triggers a warning rather than an error, missing DynOS packs means texture and character packs will not load.
+</Tip>
+
+</Accordion>
+
+---
+
+## Asset errors
+
+<Accordion title="SDL2 initialization failure or crash on startup">
+
+The launcher itself is built on SDL2 and requires several SDL2 libraries to be installed on your system. A missing library causes an immediate crash before any UI is drawn, often with an error like `libSDL2.so.0: cannot open shared object file`.
+
+**Required system libraries**
+
+```bash
+# Debian / Ubuntu
+sudo apt install libsdl2-2.0-0 libsdl2-image-2.0-0 libsdl2-mixer-2.0-0 libsdl2-ttf-2.0-0
+
+# Arch Linux
+sudo pacman -S sdl2 sdl2_image sdl2_mixer sdl2_ttf
+
+# Fedora
+sudo dnf install SDL2 SDL2_image SDL2_mixer SDL2_ttf
+```
+
+**Launcher asset files**
+
+After confirming the libraries are present, the launcher also requires its own asset bundle to be installed under `~/.local/share/sm64coopdx/assets/`. The most critical file is the font:
+
+```
+~/.local/share/sm64coopdx/assets/fonts/SuperMario256.ttf
+```
+
+If the assets directory is missing, copy it from alongside the launcher binary:
+
+```bash
+mkdir -p ~/.local/share/sm64coopdx/assets
+cp -r /path/to/launcher/assets/* ~/.local/share/sm64coopdx/assets/
+```
+
+**Full asset tree (from `config.rs`)**
+
+| Asset | Path under `~/.local/share/sm64coopdx/assets/` |
+|-------|-------------------------------------------------|
+| Font | `fonts/SuperMario256.ttf` |
+| Splash screen | `splash.png` |
+| Vinyl disc graphic | `vinyl_disc.png` |
+| Logo | `sm64coopdx/logo.png` |
+| Window icon | `sm64coopdx/icon.png` |
+| Background | `background.png` |
+| Navigation sound | `sounds/navigation_sound.wav` |
+| Splash sound | `sounds/splash_sound.wav` |
+| Music directory | `ogg-sounds/` |
+| Mod database | `database_sm64coopdx.json` |
+
+<Warning>
+  The launcher does not currently auto-install assets on first run. If any asset is missing the SDL2 texture load will silently fail or produce a crash depending on which file is absent.
+</Warning>
+
+</Accordion>
+
+---
+
+## Permission errors
+
+<Accordion title='"Savepath is not writable" — cannot write to the save directory'>
+
+Before spawning the game, `validate_game_installation()` writes a temporary probe file (`.launcher_write_test`) to `~/.local/share/sm64coopdx/` to confirm it is writable. If this write fails, the error is shown and the launch is cancelled.
+
+**Fix — restore user ownership and write permissions:**
+
+```bash
+chmod -R u+rw ~/.local/share/sm64coopdx/
+```
+
+If the directory is owned by `root` (for example after a previous `sudo` run), reclaim ownership first:
+
+```bash
+sudo chown -R "$USER":"$USER" ~/.local/share/sm64coopdx/
+chmod -R u+rw ~/.local/share/sm64coopdx/
+```
+
+If the directory does not exist yet the launcher will attempt to create it via `fs::create_dir_all`. A creation failure typically means the parent path (`~/.local/share/`) is not writable, which points to a broader home-directory permission problem.
+
+<Note>
+  The game process is spawned with a clean, whitelisted environment (no `LD_PRELOAD`, no `LD_LIBRARY_PATH`). Permission errors in the save directory are always a filesystem issue, not an environment one.
+</Note>
+
+</Accordion>

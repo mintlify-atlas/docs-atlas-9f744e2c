@@ -1,0 +1,251 @@
+---
+title: "Game launch pipeline: validation, ROM setup, and process spawn"
+sidebarTitle: "Launch Pipeline"
+description: "Step-by-step walkthrough of what happens when the user presses Enter to launch SM64 Coop DX: fade, pre-launch validation, ROM search and copy, CLI arg assembly, and process spawn."
+---
+
+When the user presses Enter (or the gamepad A button) on the main screen, the launcher does not immediately hand control to the game. It first fades the display to black, validates the game installation, ensures the base ROM is in place, assembles a complete CLI argument list from every active sub-screen, configures a sanitised environment, and only then spawns the game process. A background monitor thread watches the process and signals the launcher when it exits.
+
+The key source files are `src/game.rs` (all logic functions) and `src/main.rs` (event loop integration and fade state machine).
+
+---
+
+<Steps>
+
+  <Step title="Fade to black">
+
+When `AppState::Launching` is entered, the main loop begins a full-screen fade-to-black animation. Music volume is immediately reduced to near-silence (`sdl2::mixer::Music::set_volume(3)` — approximately 2% of full volume).
+
+The fade uses the constant `FADE_DURATION_MS = 500 ms` from `src/config.rs`. The overall launch animation (including the fade-in and the time the game takes to appear) spans roughly 1.5 seconds before the user sees the game window.
+
+```rust
+// In the Launching app state — main.rs
+if !game_launched {
+    let elapsed = launch_start.elapsed().as_millis() as u64;
+    let alpha = ((elapsed as f64 / FADE_DURATION_MS as f64) * 255.0)
+        .min(255.0) as u8;
+    // … draw black overlay with `alpha`
+    if elapsed >= FADE_DURATION_MS {
+        // proceed to validation
+    }
+}
+```
+
+  </Step>
+
+  <Step title="Pre-launch validation">
+
+`validate_game_installation(game_dir, savepath)` in `src/game.rs` runs a series of checks before any process is spawned:
+
+1. **Language file check** — verifies `{game_dir}/lang/English.ini` exists. This is a hard error; if the file is missing, the game installation is considered incomplete and a red error message is rendered on screen. Launch is aborted.
+
+2. **DynOS directory check** — checks whether `{game_dir}/dynos/` exists. This is a **warning only** (`log::warn!`); the launch continues even if the directory is absent, but DynOS packs will not load in the game.
+
+3. **Savepath writability check** — creates `~/.local/share/sm64coopdx/` if it does not exist, then writes and deletes a `.launcher_write_test` file to confirm the directory is writable. A filesystem permission error here is a hard failure.
+
+```rust
+pub fn validate_game_installation(
+    game_dir: &Path,
+    savepath: &Path,
+) -> Result<(), String>
+```
+
+On failure the returned `Err` string is displayed as red text on the launch screen. The main loop returns to the idle state after a short delay.
+
+  </Step>
+
+  <Step title="ROM search and copy">
+
+The game binary requires a copy of the Super Mario 64 (US) ROM to be present in the savepath before it will start. `ensure_rom(savepath, game_dir, data_dir)` handles this automatically.
+
+**ROM search — `find_rom(game_dir, data_dir)`**
+
+The function searches four locations in priority order:
+
+1. The game binary's directory (`game_dir`)
+2. The launcher data directory (`data_dir` = `~/.local/share/sm64coopdx/`)
+3. The `[game].rom_path` entry in `~/.config/sm64coopdx/launcher.toml`
+4. Any `~/sm64coopdx_Linux-*/` release directory
+
+Each location is scanned for files with a `.z64` extension. A file is accepted only if its MD5 hash matches:
+
+```
+20b854b239203baf6c961b850a4a51a2
+```
+
+This is the well-known MD5 of the Super Mario 64 (US v1.0) ROM.
+
+**ROM copy**
+
+Once a valid ROM is found it is copied to `~/.local/share/sm64coopdx/baserom.us.z64`. If a valid copy already exists at the destination it is not re-copied.
+
+```rust
+pub fn ensure_rom(
+    savepath: &Path,
+    game_dir: &Path,
+    data_dir: &Path,
+) -> Result<PathBuf, String>
+```
+
+Failure at this step produces a descriptive error message that includes the expected MD5 and the two recommended drop locations.
+
+  </Step>
+
+  <Step title="CLI argument assembly">
+
+`build_all_game_args` in `src/game.rs` concatenates three argument groups in order: mods → network → profile. The result is a single `Vec<String>` passed to `spawn_game`.
+
+```rust
+pub fn build_all_game_args(
+    enabled_mods: &[String],
+    network_config: &NetworkConfig,
+    profile_config: Option<&ProfileConfig>,
+    profile_dir: Option<&Path>,
+    data_dir: &Path,
+) -> Vec<String>
+```
+
+**Mod arguments** (`build_mod_args`)
+
+- If one or more mods are enabled: `--enable-mod <name>` for each enabled mod name.
+- If no mods are enabled: `--disable-mods` (single flag).
+
+**Network arguments** (`build_network_args`)
+
+| Mode | Arguments |
+|------|-----------|
+| `Local` | *(none)* |
+| `Server` | `--server <host_port>` |
+| `Client` | `--client <join_ip> <join_port>` |
+| `CoopNet` | `--coopnet <password>` |
+
+All modes also append `--playername <name>` and `--playercount <n>` when those values are non-empty/non-zero.
+
+**Profile arguments** (`build_profile_args`)
+
+Always emits `--savepath <data_dir>`. Conditionally emits:
+
+| Flag | Condition |
+|------|-----------|
+| `--configfile <path>` | Only if `sm64config.txt` is non-empty |
+| `--playername <name>` | Only if `playername` is non-empty |
+| `--skip-intro` | If `skip_intro = true` |
+| `--no-discord` | If `no_discord = true` |
+| `--fullscreen` | If `fullscreen = true` |
+| `--windowed` | If `windowed = true` |
+| `--skip-update-check` | If `skip_update_check = true` |
+| `--headless` | If `headless = true` |
+
+  </Step>
+
+  <Step title="Environment setup">
+
+`build_game_env()` in `src/game.rs` constructs the game's environment from scratch. It does **not** inherit the launcher's environment. Instead it calls `Command::env_clear()` internally and then re-adds only a whitelisted set of variables:
+
+```
+DISPLAY          WAYLAND_DISPLAY   XAUTHORITY
+HOME             XDG_RUNTIME_DIR   XDG_DATA_HOME
+XDG_CONFIG_HOME  XDG_CACHE_HOME    XDG_DATA_DIRS
+PULSE_SERVER     PULSE_COOKIE      ALSA_CARD
+DBUS_SESSION_BUS_ADDRESS
+LANG             LC_ALL            LC_MESSAGES
+PATH             USER              SHELL           TERM
+```
+
+<Warning>
+Variables such as `LD_LIBRARY_PATH`, `LD_PRELOAD`, and `PYTHONPATH` are intentionally **stripped**. If the launcher runs inside a Flatpak, AppImage, or conda environment these variables point to the launcher's own libraries, which would cause segfaults or symbol mismatches when inherited by the game process.
+</Warning>
+
+  </Step>
+
+  <Step title="Process spawn">
+
+`spawn_game(binary, args, log_dir)` in `src/game.rs` performs the final spawn:
+
+1. Verifies the binary exists and is a regular file.
+2. On Unix, ensures the binary has execute permission (`chmod 755` if needed).
+3. Sets the working directory to `binary.parent()` — the game expects to find its assets relative to its own location.
+4. Redirects stdout to `/dev/null`.
+5. Redirects stderr to `~/.local/share/sm64coopdx/game_stderr.log` for post-mortem diagnosis.
+6. Applies the whitelisted environment from `build_game_env()`.
+
+```rust
+pub fn spawn_game(
+    binary: &Path,
+    args: &[String],
+    log_dir: &Path,
+) -> Result<Child, String>
+```
+
+A successful call returns the `Child` handle, which is immediately passed to `spawn_monitor`.
+
+  </Step>
+
+  <Step title="Monitor thread">
+
+`spawn_monitor(child: Child)` spawns a background OS thread whose only job is to wait for the game process to exit:
+
+```rust
+pub static GAME_EXITED: AtomicBool = AtomicBool::new(false);
+
+pub fn spawn_monitor(child: Child) {
+    GAME_EXITED.store(false, Ordering::SeqCst);
+    std::thread::spawn(move || {
+        let mut c = child;
+        let _ = c.wait();
+        GAME_EXITED.store(true, Ordering::Release);
+    });
+}
+```
+
+The monitor thread is not allowed to mutate UI state directly (concurrency contract from `AGENTS.md`). It only sets the `GAME_EXITED` atomic flag. The main event loop checks this flag each frame and, when it detects `true`, restores the music volume to `MUSIC_VOLUME = 28` (about 22% of SDL2_mixer's maximum).
+
+  </Step>
+
+</Steps>
+
+---
+
+## Example command line
+
+A typical launch command line for a player named `MyName` hosting a server on port 7777 with one mod enabled looks like this:
+
+```bash
+./sm64coopdx \
+  --disable-mods \
+  --enable-mod my_mod \
+  --server 7777 \
+  --playername MyName \
+  --playercount 8 \
+  --savepath ~/.local/share/sm64coopdx/ \
+  --configfile ~/.local/share/sm64coopdx/profiles/MyProfile/sm64config.txt \
+  --skip-intro
+```
+
+The actual order is: mod args first, then network args, then profile args. The `--disable-mods` flag is omitted when at least one mod is enabled — it only appears when the enabled-mods list is empty.
+
+---
+
+## Game path resolution
+
+Before the pipeline runs, the launcher must know where the game binary lives. `resolve_game_path(cli_arg, profile_override)` tries five sources in priority order:
+
+<Steps>
+  <Step title="CLI argument">
+    `--game-path /path/to/sm64coopdx` passed to the launcher itself.
+  </Step>
+  <Step title="Environment variable">
+    `SM64COOPDX_PATH` environment variable.
+  </Step>
+  <Step title="Profile override">
+    `game_path` field in the active profile's `profile.json` (if set).
+  </Step>
+  <Step title="launcher.toml">
+    `[game].path` in `~/.config/sm64coopdx/launcher.toml`.
+  </Step>
+  <Step title="Default path">
+    Auto-detected from known release directory layouts, e.g. `~/sm64coopdx_Linux-*/sm64coopdx`.
+  </Step>
+</Steps>
+
+Each level is validated — if the path does not point to an existing file the resolver falls through to the next level. The final path is always canonicalised (absolute, symlinks resolved) so that `current_dir(binary.parent())` in `spawn_game` cannot interfere with relative-path lookup in `Command::new()`.

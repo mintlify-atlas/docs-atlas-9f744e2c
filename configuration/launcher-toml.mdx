@@ -1,0 +1,139 @@
+---
+title: "Configure the launcher with launcher.toml"
+sidebarTitle: "launcher.toml"
+description: "The launcher.toml file at ~/.config/sm64coopdx/launcher.toml sets the game binary path and ROM path. All fields are optional with sensible auto-detection fallbacks."
+---
+
+The launcher reads an optional `launcher.toml` file to let you point it at your SM64 Coop DX binary and ROM without setting environment variables or passing CLI flags every time. Every field in this file is optional — if you leave it empty, or skip the file entirely, the launcher falls through its auto-detection chain and still works as long as your game is installed in a recognisable location.
+
+## File location
+
+```
+~/.config/sm64coopdx/launcher.toml
+```
+
+This follows the [XDG Base Directory Specification](https://specifications.freedesktop.org/basedir-spec/latest/). On a typical Linux desktop `~/.config` maps to `$XDG_CONFIG_HOME`. The launcher creates the `sm64coopdx/` subdirectory automatically on first run; you only need to create `launcher.toml` itself.
+
+## Annotated example
+
+```toml
+[game]
+# Absolute path to the sm64coopdx executable.
+# Optional — omit to use auto-detection.
+path = "/home/user/sm64coopdx_Linux-1.5.1-autoUpdater/sm64coopdx"
+
+# Absolute path to your Super Mario 64 (USA) ROM (.z64 format).
+# Optional — omit and the launcher will scan common locations.
+rom_path = "/home/user/sm64coopdx_Linux-1.5.1-autoUpdater/Super Mario 64 (USA).z64"
+```
+
+<Note>
+  The file must be valid [TOML](https://toml.io/). Both fields live under the `[game]` table header. Indentation is optional in TOML, but the section header is required.
+</Note>
+
+## Field reference
+
+### `[game].path`
+
+| | |
+|---|---|
+| **Type** | String (absolute path) |
+| **Required** | No |
+| **Default** | Auto-detected (see [Path Resolution](/configuration/game-path-resolution)) |
+
+The absolute path to the `sm64coopdx` binary. When present, the launcher validates that the file exists before using it; if it does not exist the launcher logs a warning and falls through to auto-detection.
+
+```toml
+[game]
+path = "/home/user/sm64coopdx_Linux-1.5.1-autoUpdater/sm64coopdx"
+```
+
+<Tip>
+  Use the full absolute path. Relative paths are resolved against the working directory at launch time, which can vary depending on how you start the launcher.
+</Tip>
+
+### `[game].rom_path`
+
+| | |
+|---|---|
+| **Type** | String (absolute path) |
+| **Required** | No |
+| **Default** | Scanned from common locations |
+
+The absolute path to your Super Mario 64 (USA) `.z64` ROM file. The launcher verifies the file's MD5 checksum (`20b854b239203baf6c961b850a4a51a2`) before accepting it. If the path is set but the file is missing or has a wrong checksum, the launcher warns and continues scanning other locations.
+
+```toml
+[game]
+rom_path = "/home/user/sm64coopdx_Linux-1.5.1-autoUpdater/Super Mario 64 (USA).z64"
+```
+
+The ROM search order (when `rom_path` is also consulted) is:
+1. Game binary directory
+2. Launcher data directory (`~/.local/share/sm64coopdx/`)
+3. `[game].rom_path` from `launcher.toml`
+4. `~/sm64coopdx_Linux-*/` glob in your home directory
+
+## Priority in the resolution chain
+
+`launcher.toml` is **tier 4** out of 5 in the game-path priority chain. Higher-priority sources are checked first and, if valid, `launcher.toml` is never read for that field.
+
+| Priority | Source |
+|---|---|
+| 1 (highest) | `--game-path` CLI flag |
+| 2 | `SM64COOPDX_PATH` environment variable |
+| 3 | Per-profile `game_path` in `profile.json` |
+| **4** | **`launcher.toml` → `[game].path`** |
+| 5 (lowest) | Auto-detection |
+
+See [Path Resolution](/configuration/game-path-resolution) for the full breakdown of each tier.
+
+## Alternative configuration methods
+
+<Tabs>
+  <Tab title="Environment variable">
+    Set `SM64COOPDX_PATH` before launching. This is tier 2 — it beats `launcher.toml` but loses to `--game-path`.
+
+    ```bash
+    export SM64COOPDX_PATH="/home/user/sm64coopdx_Linux-1.5.1-autoUpdater/sm64coopdx"
+    ./sm64coopdx-launcher
+    ```
+
+    Add the `export` line to your `~/.bashrc` or `~/.profile` to make it permanent.
+  </Tab>
+  <Tab title="CLI flag">
+    Pass `--game-path` when starting the launcher. This is tier 1 — the highest priority source.
+
+    ```bash
+    ./sm64coopdx-launcher --game-path /home/user/sm64coopdx_Linux-1.5.1-autoUpdater/sm64coopdx
+    ```
+
+    Useful for one-off overrides or testing a different game version without touching your config.
+  </Tab>
+  <Tab title="Per-profile override">
+    Add a `game_path` field directly to a profile's `profile.json` (tier 3). This lets different profiles use different game binaries — for example, a stable build for casual play and a development build for testing.
+
+    ```json
+    {
+      "playername": "MyPlayer",
+      "game_path": "/home/user/sm64coopdx-dev/sm64coopdx"
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Creating the file
+
+```bash
+mkdir -p ~/.config/sm64coopdx
+cat > ~/.config/sm64coopdx/launcher.toml << 'EOF'
+[game]
+path = "/home/user/sm64coopdx_Linux-1.5.1-autoUpdater/sm64coopdx"
+rom_path = "/home/user/sm64coopdx_Linux-1.5.1-autoUpdater/Super Mario 64 (USA).z64"
+EOF
+```
+
+Replace the paths with the actual locations on your system. After saving, start the launcher — it reads `launcher.toml` on every launch, so changes take effect immediately without a restart.
+
+<Warning>
+  If `launcher.toml` contains invalid TOML syntax the file is silently ignored and the launcher falls through to auto-detection. Double-check your quotes and section headers if changes don't seem to take effect.
+</Warning>

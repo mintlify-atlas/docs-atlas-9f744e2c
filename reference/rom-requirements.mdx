@@ -1,0 +1,108 @@
+---
+title: "Super Mario 64 ROM requirements and validation"
+sidebarTitle: "ROM Requirements"
+description: "The launcher requires a Super Mario 64 (USA) ROM with MD5 20b854b239203baf6c961b850a4a51a2. It searches common locations automatically and copies the ROM to the save path."
+---
+
+SM64 Coop DX is built from the Super Mario 64 decompilation project and requires an original Super Mario 64 (USA) ROM to reconstruct its game assets at runtime. The launcher validates this ROM by MD5 checksum before every launch and copies it into the shared data directory so the game can find it reliably — regardless of where you keep the original file.
+
+<Warning>
+  The launcher does **not** distribute ROM files. You must own a legitimate physical copy of Super Mario 64 and provide the ROM yourself. Downloading ROMs for games you do not own may be illegal in your jurisdiction.
+</Warning>
+
+---
+
+## Required ROM
+
+| Property | Value |
+|----------|-------|
+| Title | Super Mario 64 (USA) |
+| Format | `.z64` (big-endian byte order) |
+| MD5 checksum | `20b854b239203baf6c961b850a4a51a2` |
+| Filename after copy | `baserom.us.z64` |
+
+The MD5 value is hardcoded in the launcher source as `ROM_MD5` and the destination filename as `ROM_FILENAME`. Any `.z64` file anywhere on your system is accepted as a ROM candidate — the file name does not matter, only the MD5 hash.
+
+---
+
+## Verifying your ROM
+
+You can check whether your ROM is valid before launching:
+
+```bash
+md5sum "Super Mario 64 (USA).z64"
+# must output: 20b854b239203baf6c961b850a4a51a2
+```
+
+If the output hash does not match, the file is either a different region (Japan, Europe, Shindou), a different format (`.n64` is little-endian and has a different hash), or a bad dump.
+
+---
+
+## ROM search order
+
+When you press **Launch**, the launcher searches for a valid ROM in the following order, stopping at the first `.z64` file whose MD5 matches:
+
+<Steps>
+  ### Game binary directory
+
+  The directory containing the `sm64coopdx` binary is scanned first. If you extracted a release archive like `~/sm64coopdx_Linux-1.5.1-autoUpdater/`, placing the ROM inside that folder is the simplest option.
+
+  ### Launcher data directory
+
+  `~/.local/share/sm64coopdx/` is searched next. Any `.z64` file with the correct MD5 found here satisfies the requirement.
+
+  ### `launcher.toml` → `[game].rom_path`
+
+  If neither of the above directories contains a valid ROM, the launcher reads `~/.config/sm64coopdx/launcher.toml` and checks the `[game].rom_path` key:
+
+  ```toml
+  [game]
+  rom_path = "/path/to/Super Mario 64 (USA).z64"
+  ```
+
+  The file at the specified path is validated by MD5. If the path is wrong or the hash does not match, the launcher falls through to the next step.
+
+  ### `~/sm64coopdx_Linux-*/` glob
+
+  Finally, the launcher searches every directory in your home folder whose name starts with `sm64coopdx_Linux-` for a `.z64` file with the correct MD5. This covers all extracted release archives without any configuration.
+</Steps>
+
+---
+
+## What happens after the ROM is found
+
+Once a valid ROM is located the launcher copies it to `~/.local/share/sm64coopdx/baserom.us.z64` before spawning the game process. On subsequent launches, if that destination file already exists and its MD5 is valid, the copy step is skipped entirely — the launcher will not copy the file again.
+
+The game binary then reads `baserom.us.z64` from the savepath (`~/.local/share/sm64coopdx/`) during its asset extraction phase.
+
+---
+
+## Common errors
+
+### "No valid SM64 US ROM found"
+
+The launcher could not find any `.z64` file with MD5 `20b854b239203baf6c961b850a4a51a2` in any of the four search locations.
+
+**Solutions:**
+
+1. **Place the ROM in the game directory.** Copy your ROM (any filename ending in `.z64`) into the same folder as the `sm64coopdx` binary.
+
+2. **Place the ROM in the data directory.** Copy the ROM to `~/.local/share/sm64coopdx/` with any `.z64` filename.
+
+3. **Set `rom_path` in `launcher.toml`.** Create or edit `~/.config/sm64coopdx/launcher.toml`:
+
+   ```toml
+   [game]
+   rom_path = "/home/yourname/roms/Super Mario 64 (USA).z64"
+   ```
+
+4. **Verify the ROM format.** The launcher only accepts `.z64` (big-endian) format. If your ROM is `.n64` (little-endian) or `.v64` (byte-swapped), you will need to convert it first using a tool such as `n64tool` or `Tool64`.
+
+### "The game is stuck on 'Loading ROM Assets'"
+
+The ROM was found and copied, but the game cannot read it from the savepath. Check that `~/.local/share/sm64coopdx/` is writable by your user and that `baserom.us.z64` is not zero bytes:
+
+```bash
+ls -lh ~/.local/share/sm64coopdx/baserom.us.z64
+# Expected: a file approximately 64 MB in size
+```

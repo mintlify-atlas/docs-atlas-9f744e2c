@@ -1,0 +1,68 @@
+---
+title: "SM64 Coop DX Launcher file and directory structure"
+sidebarTitle: "File Structure"
+description: "Complete map of every file and directory the launcher reads or writes, including config, data, profiles, mods, DynOS packs, assets, and game logs."
+---
+
+The launcher keeps its configuration in the standard XDG directories so it does not pollute your home directory. There are two roots: `~/.config/sm64coopdx/` for global settings and `~/.local/share/sm64coopdx/` for all mutable game data. The game binary and its own resource files live wherever you extracted the SM64 Coop DX release archive.
+
+## Launcher files
+
+These paths are created and managed by the launcher itself.
+
+| Path | Purpose |
+|------|---------|
+| `~/.config/sm64coopdx/launcher.toml` | Global launcher config — sets the game binary path (`[game].path`) and optional ROM path (`[game].rom_path`) |
+| `~/.local/share/sm64coopdx/sm64config.txt` | Shared game config file; the launcher reads and writes mod enable lines, DynOS pack lines, and network settings here |
+| `~/.local/share/sm64coopdx/mods/` | Installed mods; the launcher scans this directory for `.lua` files and folders containing `main.lua` |
+| `~/.local/share/sm64coopdx/dynos/packs/` | DynOS resource pack directories; each immediate subdirectory is treated as one pack |
+| `~/.local/share/sm64coopdx/profiles/` | Root directory for all player profiles |
+| `~/.local/share/sm64coopdx/profiles/active.txt` | Single-line text file containing the name of the currently active profile |
+| `~/.local/share/sm64coopdx/profiles/<name>/profile.json` | Per-profile options: player name, boolean launch flags, optional binary path override, and creation timestamp |
+| `~/.local/share/sm64coopdx/profiles/<name>/sm64config.txt` | Per-profile game config; passed to the game via `--configfile` when the file contains at least one byte |
+| `~/.local/share/sm64coopdx/profiles/<name>/saves/` | Save file directory (legacy — present for compatibility; all profiles currently share a common save path) |
+| `~/.local/share/sm64coopdx/assets/` | Launcher assets including fonts, sounds, images, and the mod database |
+| `~/.local/share/sm64coopdx/baserom.us.z64` | Validated ROM copied here automatically before game launch |
+| `~/.local/share/sm64coopdx/game_stderr.log` | Game process stderr captured for post-mortem diagnosis |
+
+<Note>
+  The launcher passes `--savepath ~/.local/share/sm64coopdx/` to the game binary so both the launcher and the game use the same filesystem root for mods, the ROM, DynOS packs, and saves.
+</Note>
+
+### Assets sub-tree
+
+The `assets/` directory is populated once from a bundled archive. The launcher references these specific paths at runtime:
+
+| Asset path | Used for |
+|-----------|---------|
+| `assets/fonts/SuperMario256.ttf` | Primary UI font |
+| `assets/splash.png` | Splash screen graphic |
+| `assets/vinyl_disc.png` | Animated vinyl disc graphic |
+| `assets/sm64coopdx/logo.png` | Game logo shown on the main screen |
+| `assets/sm64coopdx/icon.png` | Window icon |
+| `assets/background.png` | Main background image |
+| `assets/sounds/navigation_sound.wav` | Menu navigation sound effect |
+| `assets/sounds/splash_sound.wav` | Splash screen sound effect |
+| `assets/ogg-sounds/` | Directory of OGG background music tracks |
+| `assets/database_sm64coopdx.json` | Mod database used by the download browser |
+
+## Game files
+
+These files live inside the SM64 Coop DX installation directory (for example `~/sm64coopdx_Linux-1.5.1-autoUpdater/`). The launcher validates some of them at startup before spawning the game process.
+
+| File / Directory | Required | Purpose |
+|-----------------|----------|---------|
+| `sm64coopdx` | **Yes** | Game binary — the executable the launcher spawns |
+| `lang/English.ini` | **Yes** | Language strings; the launcher checks this file exists as part of installation validation |
+| `dynos/` | Recommended | Base DynOS resource packs shipped with the game |
+| `mods/` | No | Base game mods bundled with the release |
+| `Super Mario 64 (USA).z64` | **Yes** | ROM file searched here first; must have MD5 `20b854b239203baf6c961b850a4a51a2` |
+| `libdiscord_game_sdk.so` | No | Discord Game SDK; loaded by the game at runtime for rich presence |
+
+<Warning>
+  If `lang/English.ini` is missing, the launcher will display an error and refuse to launch the game. Make sure the `lang/` directory is present next to the game binary.
+</Warning>
+
+<Tip>
+  You can have multiple game binary directories and select which one each profile uses by setting the `game_path` field in that profile's `profile.json`. See the [profile.json reference](/reference/profile-json) for details.
+</Tip>
